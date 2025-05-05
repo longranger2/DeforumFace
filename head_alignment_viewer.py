@@ -17,6 +17,9 @@ class HeadAlignmentViewer:
         self.root.title("头部对齐查看器")
         self.root.geometry("900x700")  # 设置更大的窗口尺寸
         
+        # 设置全局样式
+        self.setup_styles()
+        
         # 保存文件夹路径和尺寸设置
         self.folder_path = folder_path
         self.output_size = output_size
@@ -119,9 +122,8 @@ class HeadAlignmentViewer:
         Label(reference_frame, text="参考图片设置:", font=("Arial", 10, "bold"), 
               bg="#333333", fg="white").pack(anchor="w")
         
-        self.ref_button = Button(reference_frame, text="选择参考图片", 
-               command=self.select_reference_image, width=20, height=1,
-               bg="#555555", fg="white", activebackground="#777777")
+        self.ref_button = ttk.Button(reference_frame, text="选择参考图片", 
+               command=self.select_reference_image, width=20, style="TButton")
         self.ref_button.pack(pady=5)
         
         # 标签显示当前参考图片
@@ -154,40 +156,45 @@ class HeadAlignmentViewer:
         buttons_frame = Frame(control_frame, bg="#333333")
         buttons_frame.pack(fill="x", pady=10)
         
+        # 使用ttk.Button代替普通Button，提供更好的视觉反馈
         # 重新处理按钮
-        self.process_all_button = Button(buttons_frame, text="重新处理所有图片", 
-               command=self.reprocess_images, width=20, height=1,
-               bg="#4CAF50", fg="white", activebackground="#45a049")
+        self.process_all_button = ttk.Button(buttons_frame, text="重新处理所有图片", 
+               command=self.reprocess_images, width=20, style="Green.TButton")
         self.process_all_button.pack(pady=5)
         
         # 处理当前图片按钮
-        self.process_current_button = Button(buttons_frame, text="仅处理当前图片", 
-               command=self.process_current_image, width=20, height=1,
-               bg="#2196F3", fg="white", activebackground="#0b7dda")
+        self.process_current_button = ttk.Button(buttons_frame, text="仅处理当前图片", 
+               command=self.process_current_image, width=20, style="Blue.TButton")
         self.process_current_button.pack(pady=5)
                
         # 保存按钮
-        self.save_current_button = Button(buttons_frame, text="保存当前图片", 
-               command=self.save_current_image, width=20, height=1,
-               bg="#FF9800", fg="white", activebackground="#e68a00")
+        self.save_current_button = ttk.Button(buttons_frame, text="保存当前图片", 
+               command=self.save_current_image, width=20, style="Orange.TButton")
         self.save_current_button.pack(pady=5)
                
-        self.save_all_button = Button(buttons_frame, text="保存所有图片", 
-               command=self.save_all_images, width=20, height=1,
-               bg="#FF5722", fg="white", activebackground="#e64a19")
+        self.save_all_button = ttk.Button(buttons_frame, text="保存所有图片", 
+               command=self.save_all_images, width=20, style="Red.TButton")
         self.save_all_button.pack(pady=5)
         
+        # 添加导出视频按钮
+        self.export_video_button = ttk.Button(buttons_frame, text="导出为视频", 
+                                       command=self.export_video, width=20, style="Purple.TButton")
+        self.export_video_button.pack(pady=5)
+        
         # 添加查看被跳过的图片按钮
-        self.show_skipped_button = Button(buttons_frame, text="查看被跳过的图片", 
-                                       command=self.show_skipped_images, width=20, height=1,
-                                       bg="#9C27B0", fg="white", activebackground="#7B1FA2")
+        self.show_skipped_button = ttk.Button(buttons_frame, text="查看被跳过的图片", 
+                                       command=self.show_skipped_images, width=20, style="Purple.TButton")
         self.show_skipped_button.pack(pady=5)
         
         # 添加进度条
         progress_frame = Frame(control_frame, bg="#333333")
         progress_frame.pack(fill="x", pady=10)
         
-        Label(progress_frame, text="处理进度:", bg="#333333", fg="white").pack(anchor="w")
+        # 进度条标签
+        self.progress_label = Label(progress_frame, text="处理进度:", bg="#333333", fg="white")
+        self.progress_label.pack(anchor="w")
+        
+        # 进度条
         self.progress_var = IntVar()
         self.progress_bar = ttk.Progressbar(progress_frame, orient="horizontal", 
                                           length=240, mode="determinate", 
@@ -211,12 +218,12 @@ class HeadAlignmentViewer:
         nav_frame = Frame(display_frame, bg="#222222")
         nav_frame.pack(side="bottom", fill="x", pady=5)
         
-        self.prev_button = Button(nav_frame, text="上一张", command=self.prev_image, 
-                                width=10, height=1, bg="#555555", fg="white")
+        self.prev_button = ttk.Button(nav_frame, text="上一张", command=self.prev_image, 
+                                width=10, style="Nav.TButton")
         self.prev_button.pack(side="left", padx=20)
         
-        self.next_button = Button(nav_frame, text="下一张", command=self.next_image, 
-                                width=10, height=1, bg="#555555", fg="white")
+        self.next_button = ttk.Button(nav_frame, text="下一张", command=self.next_image, 
+                                width=10, style="Nav.TButton")
         self.next_button.pack(side="right", padx=20)
         
         # 创建图像显示区域
@@ -256,6 +263,49 @@ class HeadAlignmentViewer:
         # 启动工作线程
         self.start_worker_thread()
         
+    def setup_styles(self):
+        """设置ttk样式以获得更好的视觉反馈"""
+        style = ttk.Style()
+        
+        # 通用按钮样式
+        style.configure("TButton", padding=6, relief="raised", 
+                       background="#555555", foreground="white")
+        
+        # 按下时的样式
+        style.map("TButton",
+                 foreground=[('pressed', 'white'), ('active', 'white')],
+                 background=[('pressed', '#333333'), ('active', '#777777')])
+        
+        # 颜色主题按钮
+        style.configure("Green.TButton", background="#4CAF50")
+        style.map("Green.TButton",
+                 background=[('pressed', '#3d8b40'), ('active', '#45a049')])
+        
+        style.configure("Blue.TButton", background="#2196F3")
+        style.map("Blue.TButton",
+                 background=[('pressed', '#0b7dda'), ('active', '#0b7dda')])
+        
+        style.configure("Orange.TButton", background="#FF9800")
+        style.map("Orange.TButton",
+                 background=[('pressed', '#e68a00'), ('active', '#e68a00')])
+        
+        style.configure("Red.TButton", background="#FF5722")
+        style.map("Red.TButton",
+                 background=[('pressed', '#e64a19'), ('active', '#e64a19')])
+        
+        style.configure("Purple.TButton", background="#9C27B0")
+        style.map("Purple.TButton",
+                 background=[('pressed', '#7B1FA2'), ('active', '#7B1FA2')])
+        
+        style.configure("Nav.TButton", background="#555555")
+        style.map("Nav.TButton",
+                 background=[('pressed', '#333333'), ('active', '#777777')])
+                 
+        # 禁用按钮样式
+        style.map("TButton", 
+                 foreground=[('disabled', '#888888')],
+                 background=[('disabled', '#444444')])
+    
     def update_eye_distance_display(self, value):
         """更新眼睛间距显示值"""
         self.eye_distance_display.set(f"{int(value)}%")
@@ -314,19 +364,28 @@ class HeadAlignmentViewer:
                 self.root.after(0, lambda: self.progress_var.set(0))
     
     def disable_buttons(self):
-        """禁用所有按钮"""
+        """禁用所有按钮，更清晰的视觉反馈"""
         for button in [self.process_all_button, self.process_current_button, 
                       self.save_current_button, self.save_all_button,
                       self.prev_button, self.next_button, self.ref_button, self.show_skipped_button]:
             button.config(state="disabled")
-    
+        
+        # 通过改变进度条颜色提供反馈
+        self.progress_label.config(fg="#00FF00")
+        
     def enable_buttons(self):
-        """启用所有按钮"""
+        """启用所有按钮，更清晰的视觉反馈"""
         for button in [self.process_all_button, self.process_current_button, 
                       self.save_current_button, self.save_all_button,
                       self.prev_button, self.next_button, self.ref_button, self.show_skipped_button]:
             button.config(state="normal")
+            
+        # 恢复进度条标签颜色
+        self.progress_label.config(fg="white")
         
+        # 任务完成时振动提示
+        self.shake_window_gentle()
+    
     def prompt_for_reference_image(self):
         """提示用户选择参考图片"""
         response = messagebox.askyesno("选择参考图片", 
@@ -355,26 +414,77 @@ class HeadAlignmentViewer:
             self.process_current_image()
     
     def update_status(self, message):
-        """更新状态信息"""
-        self.status_label.config(text=message)
-        self.root.update_idletasks()  # 强制更新界面
+        """更新状态信息，添加视觉强调"""
+        # 保存旧文本和颜色
+        old_fg = self.status_label.cget("fg")
         
+        # 设置新文本并变色
+        self.status_label.config(text=message, fg="#00FF00")
+        
+        # 1秒后恢复原来的颜色
+        self.root.after(1000, lambda: self.status_label.config(fg=old_fg))
+        
+        # 强制更新界面
+        self.root.update_idletasks()
+    
     def add_task(self, task, *args, callback=None, **kwargs):
-        """添加任务到队列"""
+        """添加任务到队列并提供视觉反馈"""
         if self.is_processing:
-            messagebox.showinfo("提示", "当前有任务正在处理中，请稍候...")
+            # 更明显的视觉反馈
+            self.flash_progress_label("当前有任务正在处理中...")
             return
             
         # 重置进度条
         self.progress_var.set(0)
         
+        # 禁用所有按钮并改变进度标签
+        self.disable_buttons()
+        self.flash_progress_label("准备中...")
+        
         # 添加任务到队列
         self.task_queue.put((task, args, kwargs))
+        
+        # 通过闪烁进度条标签提供视觉反馈
+        self.root.after(100, lambda: self.progress_label.config(fg="#00FF00"))
+        self.root.after(300, lambda: self.progress_label.config(fg="white"))
     
-    def update_progress(self, value):
-        """更新进度条"""
-        self.progress_var.set(value)
-        self.root.update_idletasks()
+    def flash_progress_label(self, message):
+        """闪烁进度标签提供明显的视觉反馈"""
+        # 保存原始文本
+        original_text = self.progress_label.cget("text")
+        original_color = self.progress_label.cget("fg")
+        
+        # 更新文本和颜色
+        self.progress_label.config(text=message, fg="#FF5722")
+        
+        # 1秒后恢复
+        self.root.after(1000, lambda: self.progress_label.config(
+            text="处理进度:", fg=original_color))
+            
+        # 更新状态文本
+        self.update_status(message)
+        
+        # 振动窗口提供反馈
+        self.shake_window_gentle()
+    
+    def shake_window_gentle(self, *args):
+        """轻微振动窗口提供反馈"""
+        try:
+            original_geometry = self.root.geometry()
+            
+            def _move(dx, dy):
+                x, y = self.root.winfo_x(), self.root.winfo_y()
+                self.root.geometry(f"+{x+dx}+{y+dy}")
+                
+            # 设置振动序列 - 非常轻微
+            sequence = [(2, 0), (-4, 0), (4, 0), (-2, 0)]
+            
+            # 执行振动
+            for i, (dx, dy) in enumerate(sequence):
+                self.root.after(i * 50, lambda x=dx, y=dy: _move(x, y))
+        except Exception:
+            # 安全地忽略任何振动错误，不影响程序正常功能
+            pass
     
     def process_images_task(self):
         """处理所有图片的任务函数"""
@@ -804,4 +914,186 @@ class HeadAlignmentViewer:
     def run(self):
         """启动查看器"""
         self.root.mainloop()
+    
+    def update_progress(self, value):
+        """更新进度条"""
+        self.progress_var.set(value)
+        self.root.update_idletasks()
+    
+    def export_video(self):
+        """导出处理后的图片为视频"""
+        if not self.processed_images:
+            messagebox.showwarning("警告", "没有处理过的图片可以导出为视频")
+            return
+            
+        # 打开对话框设置视频参数
+        export_dialog = Tk()
+        export_dialog.title("导出视频设置")
+        export_dialog.geometry("400x300")
+        export_dialog.configure(bg="#333333")
+        
+        # 设置视频参数
+        Label(export_dialog, text="视频导出设置", font=("Arial", 14, "bold"), 
+             bg="#333333", fg="white").pack(pady=10)
+        
+        # FPS设置
+        fps_frame = Frame(export_dialog, bg="#333333")
+        fps_frame.pack(fill="x", padx=20, pady=10)
+        
+        Label(fps_frame, text="帧率 (FPS):", bg="#333333", fg="white").pack(side="left")
+        
+        fps_var = IntVar(value=4)  # 默认24fps
+        fps_options = [2, 4, 8, 16, 32, 64]
+        fps_menu = ttk.Combobox(fps_frame, textvariable=fps_var, values=fps_options, width=10)
+        fps_menu.pack(side="right")
+        
+        # 视频质量
+        quality_frame = Frame(export_dialog, bg="#333333")
+        quality_frame.pack(fill="x", padx=20, pady=10)
+        
+        Label(quality_frame, text="视频质量:", bg="#333333", fg="white").pack(side="left")
+        
+        quality_var = StringVar(value="高")
+        quality_options = ["低", "中", "高"]
+        quality_menu = ttk.Combobox(quality_frame, textvariable=quality_var, 
+                                  values=quality_options, width=10)
+        quality_menu.pack(side="right")
+        
+        # 循环设置
+        loop_var = IntVar(value=0)
+        loop_check = Checkbutton(export_dialog, text="循环播放 (生成来回的序列)", 
+                              variable=loop_var, bg="#333333", fg="white",
+                              selectcolor="#555555", activebackground="#333333")
+        loop_check.pack(padx=20, pady=10, anchor="w")
+        
+        # 视频文件名
+        name_frame = Frame(export_dialog, bg="#333333")
+        name_frame.pack(fill="x", padx=20, pady=10)
+        
+        Label(name_frame, text="输出文件名:", bg="#333333", fg="white").pack(side="left")
+        
+        filename_var = StringVar(value="aligned_video")
+        filename_entry = ttk.Entry(name_frame, textvariable=filename_var, width=20)
+        filename_entry.pack(side="right")
+        
+        # 状态标签
+        status_label = Label(export_dialog, text="", bg="#333333", fg="#AAAAAA", 
+                          wraplength=350)
+        status_label.pack(pady=10)
+        
+        # 确认和取消按钮
+        buttons_frame = Frame(export_dialog, bg="#333333")
+        buttons_frame.pack(fill="x", padx=20, pady=10)
+        
+        def cancel_export():
+            export_dialog.destroy()
+            
+        def confirm_export():
+            # 获取参数
+            fps = fps_var.get()
+            quality = quality_var.get()
+            loop = bool(loop_var.get())
+            filename = filename_var.get()
+            
+            if not filename:
+                status_label.config(text="请输入有效的文件名", fg="#FF5722")
+                return
+                
+            # 映射质量选项到编码器参数
+            quality_map = {
+                "低": {"codec": "XVID", "ext": "avi"},
+                "中": {"codec": "MP4V", "ext": "mp4"},
+                "高": {"codec": "H264", "ext": "mp4"}
+            }
+            
+            codec_info = quality_map.get(quality, quality_map["高"])
+            
+            # 构建输出路径
+            output_dir = os.path.join(self.folder_path, "videos")
+            os.makedirs(output_dir, exist_ok=True)
+            
+            output_path = os.path.join(output_dir, f"{filename}.{codec_info['ext']}")
+            
+            # 关闭对话框
+            export_dialog.destroy()
+            
+            # 添加导出任务到队列
+            self.add_task(self.export_video_task, output_path, fps, codec_info, loop)
+            
+        cancel_button = ttk.Button(buttons_frame, text="取消", command=cancel_export)
+        cancel_button.pack(side="left", padx=10)
+        
+        confirm_button = ttk.Button(buttons_frame, text="导出", 
+                                 command=confirm_export, style="Green.TButton")
+        confirm_button.pack(side="right", padx=10)
+        
+        # 运行对话框
+        export_dialog.mainloop()
+    
+    def export_video_task(self, output_path, fps, codec_info, loop=False):
+        """导出视频的任务函数"""
+        try:
+            # 获取图像尺寸
+            h, w = self.processed_images[0].shape[:2]
+            
+            # 设置编解码器
+            if codec_info["codec"] == "H264":
+                fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264编码
+            elif codec_info["codec"] == "MP4V":
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # MP4V编码
+            else:
+                fourcc = cv2.VideoWriter_fourcc(*'XVID')  # AVI编码
+                
+            # 创建VideoWriter对象
+            video = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+            
+            # 准备图像序列
+            images_to_write = self.processed_images.copy()
+            
+            # 如果启用循环，添加反向序列
+            if loop:
+                reversed_images = self.processed_images.copy()
+                reversed_images.reverse()
+                # 删除第一帧和最后一帧以避免重复
+                if len(reversed_images) > 2:
+                    reversed_images = reversed_images[1:-1]
+                images_to_write.extend(reversed_images)
+            
+            # 写入视频帧
+            total_frames = len(images_to_write)
+            for i, img in enumerate(images_to_write):
+                video.write(img)
+                # 更新进度
+                progress = int((i + 1) / total_frames * 100)
+                self.root.after(0, lambda p=progress: self.update_progress(p))
+                self.root.after(0, lambda p=i+1, t=total_frames: 
+                               self.update_status(f"导出视频进度: {p}/{t}"))
+            
+            # 释放视频写入器
+            video.release()
+            
+            # 更新状态
+            self.update_status(f"视频已成功导出为: {os.path.basename(output_path)}")
+            
+            # 询问是否打开文件夹
+            self.root.after(0, lambda: self.ask_open_video_folder(os.path.dirname(output_path)))
+            
+            return None
+            
+        except Exception as e:
+            self.update_status(f"导出视频失败: {e}")
+            messagebox.showerror("错误", f"导出视频失败: {e}")
+            return None
+    
+    def ask_open_video_folder(self, folder_path):
+        """询问是否打开视频所在文件夹"""
+        response = messagebox.askyesno("视频已导出", 
+                                     "视频已成功导出。是否打开文件夹？")
+        if response:
+            # 根据操作系统打开文件夹
+            if os.name == 'nt':  # Windows
+                os.startfile(folder_path)
+            elif os.name == 'posix':  # macOS 和 Linux
+                import subprocess
+                subprocess.call(['open', folder_path])
     
