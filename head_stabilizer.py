@@ -4,6 +4,10 @@ import mediapipe as mp
 import os
 import glob
 
+def euclidean_distance(p1, p2):
+    """计算两点间的欧几里得距离"""
+    return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
 class HeadStabilizer:
     def __init__(self, output_size=(512, 512), face_scale=1.5, preserve_background=True, force_reference_size=True, tilt_threshold=5.0):
         # 初始化面部检测模型
@@ -28,6 +32,319 @@ class HeadStabilizer:
         self.ref_image = None
         self.ref_image_size = None
         
+        # 新增：精度控制参数
+        self.alignment_tolerance = 2.0  # 对齐容差（像素）
+        self.max_iterations = 3  # 最大优化迭代次数
+        self.quality_threshold = 0.95  # 对齐质量阈值
+
+    def _get_stable_landmarks(self, image):
+        """获取最稳定的关键点组合，专注于眼睛和鼻子的精确定位"""
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        # 使用更高精度的检测
+        face_mesh = self.mp_face.FaceMesh(
+            static_image_mode=True, 
+            max_num_faces=1, 
+            refine_landmarks=True,  # 启用精细化标记点
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.5
+        )
+        
+        results = face_mesh.process(rgb_image)
+        if not results.multi_face_landmarks:
+            # 降低阈值重试
+            face_mesh = self.mp_face.FaceMesh(
+                static_image_mode=True, 
+                max_num_faces=1, 
+                refine_landmarks=True,
+                min_detection_confidence=0.3
+            )
+            results = face_mesh.process(rgb_image)
+            if not results.multi_face_landmarks:
+                return None
+
+        landmarks = results.multi_face_landmarks[0].landmark
+        h, w = image.shape[:2]
+        
+        # 选择最稳定的关键点 - 只使用眼角和鼻尖
+        # 这些点在不同表情下最稳定
+        stable_points = {
+            # 眼角（最稳定的点）
+            'left_eye_outer': (int(landmarks[33].x*w), int(landmarks[33].y*h)),    # 左眼外角
+            'left_eye_inner': (int(landmarks[133].x*w), int(landmarks[133].y*h)),  # 左眼内角
+            'right_eye_inner': (int(landmarks[362].x*w), int(landmarks[362].y*h)), # 右眼内角  
+            'right_eye_outer': (int(landmarks[263].x*w), int(landmarks[263].y*h)), # 右眼外角
+            
+            # 鼻尖（第二稳定）
+            'nose_tip': (int(landmarks[4].x*w), int(landmarks[4].y*h)),            # 鼻尖
+        }
+        
+        # 计算眼睛中心（通过内外角计算，更精确）
+        left_eye_center = (
+            (stable_points['left_eye_outer'][0] + stable_points['left_eye_inner'][0]) // 2,
+            (stable_points['left_eye_outer'][1] + stable_points['left_eye_inner'][1]) // 2
+        )
+        right_eye_center = (
+            (stable_points['right_eye_inner'][0] + stable_points['right_eye_outer'][0]) // 2,
+            (stable_points['right_eye_inner'][1] + stable_points['right_eye_outer'][1]) // 2
+        )
+        
+        stable_points['left_eye'] = left_eye_center
+        stable_points['right_eye'] = right_eye_center
+        
+        # 计算眼睛中点（面部中心）
+        eye_center = (
+            (left_eye_center[0] + right_eye_center[0]) // 2,
+            (left_eye_center[1] + right_eye_center[1]) // 2
+        )
+        stable_points['eye_center'] = eye_center
+        
+        return stable_points
+
+    def _calculate_similarity_transform(self, src_points, dst_points):
+        """计算相似变换矩阵（只包含旋转、缩放、平移，无拉伸）"""
+        assert len(src_points) >= 2, "至少需要2个点来计算相似变换"
+        
+        # 使用最稳定的点对：两个眼睛中心
+        src_eye1, src_eye2 = src_points[0], src_points[1]
+        dst_eye1, dst_eye2 = dst_points[0], dst_points[1]
+        
+        # 计算源图像和目标图像的眼睛间距
+        src_eye_dist = euclidean_distance(src_eye1, src_eye2)
+        dst_eye_dist = euclidean_distance(dst_eye1, dst_eye2)
+        
+        if src_eye_dist == 0:
+            return None
+            
+        # 计算缩放比例
+        scale = dst_eye_dist / src_eye_dist
+        
+        # 计算旋转角度
+        src_angle = np.arctan2(src_eye2[1] - src_eye1[1], src_eye2[0] - src_eye1[0])
+        dst_angle = np.arctan2(dst_eye2[1] - dst_eye1[1], dst_eye2[0] - dst_eye1[0])
+        rotation_angle = dst_angle - src_angle
+        
+        # 计算源眼睛中心
+        src_center = ((src_eye1[0] + src_eye2[0]) / 2, (src_eye1[1] + src_eye2[1]) / 2)
+        dst_center = ((dst_eye1[0] + dst_eye2[0]) / 2, (dst_eye1[1] + dst_eye2[1]) / 2)
+        
+        # 构建相似变换矩阵
+        cos_angle = np.cos(rotation_angle) * scale
+        sin_angle = np.sin(rotation_angle) * scale
+        
+        # 计算平移量
+        tx = dst_center[0] - (cos_angle * src_center[0] - sin_angle * src_center[1])
+        ty = dst_center[1] - (sin_angle * src_center[0] + cos_angle * src_center[1])
+        
+        # 构建2x3变换矩阵
+        M = np.array([
+            [cos_angle, -sin_angle, tx],
+            [sin_angle, cos_angle, ty]
+        ], dtype=np.float32)
+        
+        return M
+
+    def _refine_transform_with_additional_points(self, M, src_landmarks, dst_landmarks):
+        """使用额外的点来优化变换矩阵"""
+        if M is None or 'nose_tip' not in src_landmarks or 'nose_tip' not in dst_landmarks:
+            return M
+            
+        # 使用鼻尖进行验证和微调
+        src_nose = np.array([src_landmarks['nose_tip'][0], src_landmarks['nose_tip'][1], 1])
+        transformed_nose = M @ src_nose
+        dst_nose = np.array(dst_landmarks['nose_tip'])
+        
+        # 计算鼻尖的对齐误差
+        nose_error = euclidean_distance(transformed_nose[:2], dst_nose)
+        
+        # 如果误差较大，进行微调
+        if nose_error > self.alignment_tolerance:
+            # 计算鼻尖的偏移量
+            offset_x = dst_nose[0] - transformed_nose[0]
+            offset_y = dst_nose[1] - transformed_nose[1]
+            
+            # 对变换矩阵进行微调（只调整平移量）
+            M_refined = M.copy()
+            M_refined[0, 2] += offset_x * 0.3  # 30%的修正力度
+            M_refined[1, 2] += offset_y * 0.3
+            
+            return M_refined
+        
+        return M
+
+    def _validate_alignment_quality(self, M, src_landmarks, dst_landmarks):
+        """验证对齐质量"""
+        if M is None:
+            return 0.0
+            
+        # 计算关键点的对齐误差
+        errors = []
+        key_points = ['left_eye', 'right_eye', 'nose_tip']
+        
+        for point_name in key_points:
+            if point_name in src_landmarks and point_name in dst_landmarks:
+                src_point = np.array([src_landmarks[point_name][0], src_landmarks[point_name][1], 1])
+                transformed_point = M @ src_point
+                dst_point = np.array(dst_landmarks[point_name])
+                error = euclidean_distance(transformed_point[:2], dst_point)
+                errors.append(error)
+        
+        if not errors:
+            return 0.0
+            
+        # 根据输出尺寸动态调整误差阈值
+        # 高分辨率图片允许更大的像素误差
+        output_diagonal = np.sqrt(self.output_size[0]**2 + self.output_size[1]**2)
+        # 基于图片对角线长度的1%作为基准误差
+        base_error = output_diagonal * 0.01
+        max_acceptable_error = max(15.0, base_error)  # 至少15像素，适应高分辨率
+        
+        # 计算质量分数（基于平均误差）
+        avg_error = np.mean(errors)
+        quality_score = max(0, (max_acceptable_error - avg_error) / max_acceptable_error)
+        
+        # 添加详细的调试信息（仅在调试模式下）
+        if self.debug:
+            print(f"  质量评估详情:")
+            print(f"    平均误差: {avg_error:.2f} 像素")
+            print(f"    最大可接受误差: {max_acceptable_error:.2f} 像素")
+            print(f"    质量分数: {quality_score:.3f}")
+            for i, (point_name, error) in enumerate(zip(key_points, errors)):
+                if i < len(errors):
+                    print(f"    {point_name}: {error:.2f} 像素")
+        
+        return quality_score
+
+    def set_reference_eyes_position(self, eye_distance_percent=30):
+        """设置参考人脸关键点位置（改进精度）"""
+        # 根据输出尺寸和眼睛间距百分比计算参考眼睛位置
+        output_w, output_h = self.output_size
+        eye_distance = int(output_w * eye_distance_percent / 100)
+        
+        # 将Y位置向上移动，确保更居中的脸部位置
+        eye_y = int(output_h * 0.38)  # 稍微提高位置
+        
+        # 计算双眼的X位置（在图像宽度居中）
+        center_x = output_w // 2
+        left_eye_x = center_x - eye_distance // 2
+        right_eye_x = center_x + eye_distance // 2
+        
+        # 计算鼻尖位置（在眼睛下方）
+        nose_tip_x = center_x
+        nose_tip_y = int(eye_y + 0.08 * output_h)
+        
+        # 计算眼睛中心
+        eye_center_x = center_x
+        eye_center_y = eye_y
+        
+        # 计算眼角位置
+        left_eye_outer_x = left_eye_x - int(0.05 * output_w)
+        left_eye_inner_x = left_eye_x + int(0.03 * output_w)
+        right_eye_inner_x = right_eye_x - int(0.03 * output_w)
+        right_eye_outer_x = right_eye_x + int(0.05 * output_w)
+        
+        self.ref_eyes = {
+            'left_eye': (left_eye_x, eye_y),
+            'right_eye': (right_eye_x, eye_y),
+            'nose_tip': (nose_tip_x, nose_tip_y),
+            'eye_center': (eye_center_x, eye_center_y),
+            'left_eye_outer': (left_eye_outer_x, eye_y),
+            'left_eye_inner': (left_eye_inner_x, eye_y),
+            'right_eye_inner': (right_eye_inner_x, eye_y),
+            'right_eye_outer': (right_eye_outer_x, eye_y)
+        }
+        print(f"参考人脸关键点已设置")
+
+    def set_reference_from_image(self, ref_image):
+        """从参考图片中提取人脸特征作为对齐基准（改进版）"""
+        # 保存参考图像用于显示
+        self.ref_image = ref_image.copy()
+        self.ref_image_size = ref_image.shape[:2]
+        
+        # 如果强制使用参考图片尺寸，更新输出尺寸
+        if self.force_reference_size:
+            self.output_size = (ref_image.shape[1], ref_image.shape[0])
+            print(f"已更新输出尺寸为参考图片尺寸: {self.output_size}")
+        
+        # 获取参考图片中的稳定关键点
+        ref_landmarks = self._get_stable_landmarks(ref_image)
+        if ref_landmarks is None:
+            raise ValueError("参考图片中未检测到面部关键点，请选择清晰的正面人像照片")
+        
+        # 保存参考图片中的面部关键点
+        self.ref_eyes = ref_landmarks
+        print(f"从参考图片中提取的稳定面部特征已设置为对齐基准")
+        
+        return ref_landmarks
+
+    def align_and_crop_face(self, image, crop_size=None, show_landmarks=False):
+        """改进的对齐算法 - 使用相似变换确保无拉伸变形"""
+        # 确定输出尺寸
+        if crop_size is None:
+            if self.force_reference_size and self.ref_image_size is not None:
+                crop_size = (self.ref_image.shape[1], self.ref_image.shape[0])
+            else:
+                crop_size = self.output_size
+        
+        # 获取稳定的人脸关键点
+        face_landmarks = self._get_stable_landmarks(image)
+        if face_landmarks is None:
+            raise ValueError("未检测到面部关键点，请确保图片中有清晰的人脸")
+        
+        # 如果还没有参考关键点，设置默认的
+        if self.ref_eyes is None:
+            self.set_reference_eyes_position()
+        
+        # 准备用于相似变换的关键点对
+        # 使用最稳定的眼睛中心点对
+        src_points = [
+            face_landmarks['left_eye'],
+            face_landmarks['right_eye']
+        ]
+        dst_points = [
+            self.ref_eyes['left_eye'],
+            self.ref_eyes['right_eye']
+        ]
+        
+        # 计算初始相似变换矩阵
+        M = self._calculate_similarity_transform(src_points, dst_points)
+        
+        if M is None:
+            raise ValueError("无法计算变换矩阵")
+        
+        # 使用额外点进行优化
+        M = self._refine_transform_with_additional_points(M, face_landmarks, self.ref_eyes)
+        
+        # 验证对齐质量
+        quality_score = self._validate_alignment_quality(M, face_landmarks, self.ref_eyes)
+        
+        if quality_score < self.quality_threshold:
+            if self.debug:
+                print(f"提示：对齐质量为 {quality_score:.2f}，建议检查图片质量和光照条件")
+            # 非调试模式下不显示警告，避免干扰用户
+        
+        # 应用变换 - 使用高质量插值
+        if self.preserve_background and not self.force_reference_size:
+            h, w = image.shape[:2]
+            aligned = cv2.warpAffine(
+                image, M, (w, h), 
+                flags=cv2.INTER_CUBIC,  # 使用立方插值获得更好质量
+                borderMode=cv2.BORDER_REFLECT_101  # 使用镜像边界减少伪影
+            )
+        else:
+            aligned = cv2.warpAffine(
+                image, M, (crop_size[0], crop_size[1]), 
+                flags=cv2.INTER_CUBIC,
+                borderMode=cv2.BORDER_REFLECT_101
+            )
+        
+        # 调试模式
+        if show_landmarks or self.debug:
+            debug_image = self.draw_landmarks(image, face_landmarks)
+            return aligned, debug_image
+        
+        return aligned
+
     def _get_face_bbox(self, image):
         """获取人脸边界框"""
         results = self.face_detection.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -47,307 +364,37 @@ class HeadStabilizer:
         return (xmin, ymin, width, height)
 
     def _get_eye_points(self, image):
-        """获取人脸关键点（改进版：增加可靠性和精度）"""
-        # 转换图像颜色
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
-        # 使用FaceMesh进行细粒度特征检测
-        results = self.face.process(rgb_image)
-        if not results.multi_face_landmarks:
-            # 尝试降低阈值再次检测
-            self.face = self.mp_face.FaceMesh(static_image_mode=True, max_num_faces=1, min_detection_confidence=0.2)
-            results = self.face.process(rgb_image)
-            if not results.multi_face_landmarks:
-                print(f"无法检测到面部关键点，请确保图片中有清晰的人脸")
-                return None
-            # 恢复阈值
-            self.face = self.mp_face.FaceMesh(static_image_mode=True, max_num_faces=1, min_detection_confidence=0.5)
-
-        # 获取面部关键点坐标
-        landmarks = results.multi_face_landmarks[0].landmark
-        
-        # 左眼关键点（选取更稳定的点：眼角和眼睑中点）
-        left_eye_points = [33, 133, 157, 158, 159, 160, 161, 246]
-        left_eye_x = sum(landmarks[idx].x for idx in left_eye_points) / len(left_eye_points)
-        left_eye_y = sum(landmarks[idx].y for idx in left_eye_points) / len(left_eye_points)
-        
-        # 右眼关键点
-        right_eye_points = [263, 362, 385, 386, 387, 388, 390, 466]
-        right_eye_x = sum(landmarks[idx].x for idx in right_eye_points) / len(right_eye_points)
-        right_eye_y = sum(landmarks[idx].y for idx in right_eye_points) / len(right_eye_points)
-        
-        # 鼻尖 (使用多个点的平均以增加稳定性)
-        nose_points = [1, 4, 5, 6, 19, 94, 197]
-        nose_x = sum(landmarks[idx].x for idx in nose_points) / len(nose_points)
-        nose_y = sum(landmarks[idx].y for idx in nose_points) / len(nose_points)
-        
-        # 嘴巴中心 (使用上下唇中点)
-        mouth_points = [0, 13, 14, 17, 37, 87, 178, 317]
-        mouth_x = sum(landmarks[idx].x for idx in mouth_points) / len(mouth_points)
-        mouth_y = sum(landmarks[idx].y for idx in mouth_points) / len(mouth_points)
-        
-        # 下巴
-        chin_points = [152, 199, 200, 175, 201]
-        chin_x = sum(landmarks[idx].x for idx in chin_points) / len(chin_points)
-        chin_y = sum(landmarks[idx].y for idx in chin_points) / len(chin_points)
-        
-        # 额头中心 (使用发际线点)
-        forehead_points = [10, 108, 151, 337, 338, 297]
-        forehead_x = sum(landmarks[idx].x for idx in forehead_points) / len(forehead_points)
-        forehead_y = sum(landmarks[idx].y for idx in forehead_points) / len(forehead_points)
-        
-        # 转换为像素坐标
-        h, w = image.shape[:2]
-        
-        # 构建返回结果
-        face_landmarks = {
-            'left_eye': (int(left_eye_x*w), int(left_eye_y*h)),
-            'right_eye': (int(right_eye_x*w), int(right_eye_y*h)),
-            'nose': (int(nose_x*w), int(nose_y*h)),
-            'mouth': (int(mouth_x*w), int(mouth_y*h)),
-            'chin': (int(chin_x*w), int(chin_y*h)),
-            'forehead': (int(forehead_x*w), int(forehead_y*h))
-        }
-        
-        # 添加更多用于精确对齐的点
-        face_landmarks['left_eye_corner'] = (int(landmarks[33].x*w), int(landmarks[33].y*h))
-        face_landmarks['right_eye_corner'] = (int(landmarks[263].x*w), int(landmarks[263].y*h))
-        face_landmarks['left_eye_inner'] = (int(landmarks[133].x*w), int(landmarks[133].y*h))
-        face_landmarks['right_eye_inner'] = (int(landmarks[362].x*w), int(landmarks[362].y*h))
-        
-        # 添加更多面部特征点以提高对齐精度
-        face_landmarks['nose_tip'] = (int(landmarks[4].x*w), int(landmarks[4].y*h))
-        face_landmarks['top_nose'] = (int(landmarks[168].x*w), int(landmarks[168].y*h))
-        face_landmarks['bottom_nose'] = (int(landmarks[2].x*w), int(landmarks[2].y*h))
-        face_landmarks['left_mouth'] = (int(landmarks[61].x*w), int(landmarks[61].y*h))
-        face_landmarks['right_mouth'] = (int(landmarks[291].x*w), int(landmarks[291].y*h))
-        face_landmarks['upper_lip'] = (int(landmarks[13].x*w), int(landmarks[13].y*h))
-        face_landmarks['lower_lip'] = (int(landmarks[14].x*w), int(landmarks[14].y*h))
-        
-        # 调试用：保存所有关键点
-        if self.debug:
-            face_landmarks['all_points'] = [(int(landmarks[i].x*w), int(landmarks[i].y*h)) for i in range(len(landmarks))]
-        
-        return face_landmarks
-
-    def set_reference_eyes_position(self, eye_distance_percent=30):
-        """设置参考人脸关键点位置（改进精度）"""
-        # 根据输出尺寸和眼睛间距百分比计算参考眼睛位置
-        output_w, output_h = self.output_size
-        eye_distance = int(output_w * eye_distance_percent / 100)
-        
-        # 将Y位置向上移动，确保更居中的脸部位置
-        eye_y = int(output_h * 0.38)  # 稍微提高位置
-        
-        # 计算双眼的X位置（在图像宽度居中）
-        center_x = output_w // 2
-        left_eye_x = center_x - eye_distance // 2
-        right_eye_x = center_x + eye_distance // 2
-        
-        # 计算鼻子位置（在眼睛下方）- 精确定位
-        nose_y = int(eye_y + 0.12 * output_h)
-        nose_x = center_x
-        
-        # 计算嘴巴位置（在鼻子下方）
-        mouth_y = int(eye_y + 0.22 * output_h)
-        mouth_x = center_x
-        
-        # 计算下巴位置（在嘴巴下方）
-        chin_y = int(eye_y + 0.35 * output_h)
-        chin_x = center_x
-        
-        # 计算额头位置（在眼睛上方）
-        forehead_y = int(eye_y - 0.15 * output_h)
-        forehead_x = center_x
-        
-        # 增加更多精确参考点
-        left_eye_corner_x = left_eye_x - int(0.05 * output_w)
-        left_eye_corner_y = eye_y
-        right_eye_corner_x = right_eye_x + int(0.05 * output_w)
-        right_eye_corner_y = eye_y
-        
-        left_eye_inner_x = left_eye_x + int(0.03 * output_w)
-        left_eye_inner_y = eye_y
-        right_eye_inner_x = right_eye_x - int(0.03 * output_w)
-        right_eye_inner_y = eye_y
-        
-        # 添加更多面部特征点的参考位置
-        nose_tip_x = center_x
-        nose_tip_y = int(eye_y + 0.08 * output_h)
-        
-        top_nose_x = center_x
-        top_nose_y = int(eye_y + 0.04 * output_h)
-        
-        bottom_nose_x = center_x
-        bottom_nose_y = int(eye_y + 0.16 * output_h)
-        
-        left_mouth_x = center_x - int(0.08 * output_w)
-        left_mouth_y = mouth_y
-        
-        right_mouth_x = center_x + int(0.08 * output_w)
-        right_mouth_y = mouth_y
-        
-        upper_lip_x = center_x
-        upper_lip_y = int(eye_y + 0.19 * output_h)
-        
-        lower_lip_x = center_x
-        lower_lip_y = int(eye_y + 0.24 * output_h)
-        
-        self.ref_eyes = {
-            'left_eye': (left_eye_x, eye_y),
-            'right_eye': (right_eye_x, eye_y),
-            'nose': (nose_x, nose_y),
-            'mouth': (mouth_x, mouth_y),
-            'chin': (chin_x, chin_y),
-            'forehead': (forehead_x, forehead_y),
-            'left_eye_corner': (left_eye_corner_x, left_eye_corner_y),
-            'right_eye_corner': (right_eye_corner_x, right_eye_corner_y),
-            'left_eye_inner': (left_eye_inner_x, left_eye_inner_y),
-            'right_eye_inner': (right_eye_inner_x, right_eye_inner_y),
-            'nose_tip': (nose_tip_x, nose_tip_y),
-            'top_nose': (top_nose_x, top_nose_y),
-            'bottom_nose': (bottom_nose_x, bottom_nose_y),
-            'left_mouth': (left_mouth_x, left_mouth_y),
-            'right_mouth': (right_mouth_x, right_mouth_y),
-            'upper_lip': (upper_lip_x, upper_lip_y),
-            'lower_lip': (lower_lip_x, lower_lip_y)
-        }
-        print(f"参考人脸关键点已设置")
-
-    def set_reference_from_image(self, ref_image):
-        """从参考图片中提取人脸特征作为对齐基准（改进版）"""
-        # 保存参考图像用于显示
-        self.ref_image = ref_image.copy()
-        self.ref_image_size = ref_image.shape[:2]
-        
-        # 如果强制使用参考图片尺寸，更新输出尺寸
-        if self.force_reference_size:
-            self.output_size = (ref_image.shape[1], ref_image.shape[0])
-            print(f"已更新输出尺寸为参考图片尺寸: {self.output_size}")
-        
-        # 获取参考图片中的人脸关键点
-        ref_landmarks = self._get_eye_points(ref_image)
-        if ref_landmarks is None:
-            raise ValueError("参考图片中未检测到面部关键点，请选择清晰的正面人像照片")
-        
-        # 保存参考图片中的面部关键点
-        self.ref_eyes = ref_landmarks
-        print(f"从参考图片中提取的面部特征已设置为对齐基准")
-        
-        # 返回关键点以便调试
-        return ref_landmarks
+        """保持向后兼容性的方法"""
+        return self._get_stable_landmarks(image)
 
     def draw_landmarks(self, image, landmarks):
         """在图像上绘制面部关键点（用于调试）"""
         debug_img = image.copy()
         
         # 绘制主要关键点
-        for key, point in landmarks.items():
-            if key != 'all_points':
-                cv2.circle(debug_img, point, 3, (0, 255, 0), -1)
-                cv2.putText(debug_img, key, (point[0]+5, point[1]-5), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+        colors = {
+            'left_eye': (0, 255, 0),
+            'right_eye': (0, 255, 0), 
+            'nose_tip': (255, 0, 0),
+            'eye_center': (0, 0, 255),
+            'left_eye_outer': (255, 255, 0),
+            'left_eye_inner': (255, 255, 0),
+            'right_eye_inner': (255, 255, 0),
+            'right_eye_outer': (255, 255, 0)
+        }
         
-        # 绘制所有点（如果有）
-        if 'all_points' in landmarks and self.debug:
-            for i, point in enumerate(landmarks['all_points']):
-                if i % 10 == 0:  # 只绘制部分点以避免过于混乱
-                    cv2.circle(debug_img, point, 1, (255, 0, 0), -1)
+        for key, point in landmarks.items():
+            color = colors.get(key, (128, 128, 128))
+            cv2.circle(debug_img, point, 3, color, -1)
+            cv2.putText(debug_img, key, (point[0]+5, point[1]-5), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
         
         return debug_img
 
-    def align_and_crop_face(self, image, crop_size=None, show_landmarks=False):
-        """改进的对齐算法 - 使用多点精确对齐并裁剪照片"""
-        # 确定输出尺寸
-        if crop_size is None:
-            if self.force_reference_size and self.ref_image_size is not None:
-                # 如果强制使用参考图片尺寸，使用参考图片的尺寸
-                crop_size = (self.ref_image.shape[1], self.ref_image.shape[0])
-            else:
-                crop_size = self.output_size
-            
-        # 获取人脸关键点
-        face_landmarks = self._get_eye_points(image)
-        if face_landmarks is None:
-            raise ValueError("未检测到面部关键点，请确保图片中有清晰的人脸")
-        
-        # 调试模式：显示关键点
-        debug_image = None
-        if show_landmarks or self.debug:
-            debug_image = self.draw_landmarks(image, face_landmarks)
-        
-        # 如果还没有参考眼睛位置，设置一个
-        if self.ref_eyes is None:
-            self.set_reference_eyes_position()
-            
-        # 收集要用于对齐的关键点
-        # 确保源图像和目标图像具有相同的关键点集合
-        common_landmarks = set(face_landmarks.keys()).intersection(set(self.ref_eyes.keys()))
-        common_landmarks = [key for key in common_landmarks if key != 'all_points']  # 排除调试用的点集
-        
-        # 如果没有足够的共同关键点，使用基本的眼睛和鼻子
-        if len(common_landmarks) < 3:
-            common_landmarks = ['left_eye', 'right_eye', 'nose']
-            
-        # 构建源点和目标点数组
-        src_points = []
-        dst_points = []
-        
-        # 为不同的点指定不同的权重（通过重复添加重要的点）
-        key_points = ['left_eye', 'right_eye', 'nose', 'left_eye_inner', 'right_eye_inner']
-        for landmark in common_landmarks:
-            src_points.append(face_landmarks[landmark])
-            dst_points.append(self.ref_eyes[landmark])
-            
-            # 对重要点增加权重（通过重复添加）
-            if landmark in key_points:
-                # 重要点添加3次以增加其权重
-                for _ in range(3):
-                    src_points.append(face_landmarks[landmark])
-                    dst_points.append(self.ref_eyes[landmark])
-        
-        # 转换为NumPy数组
-        src_points = np.float32(src_points)
-        dst_points = np.float32(dst_points)
-        
-        # 使用estimateAffinePartial2D计算变换矩阵
-        # 这比手动计算更精确，并使用RANSAC算法排除异常值
-        M, inliers = cv2.estimateAffinePartial2D(
-            src_points, dst_points, 
-            method=cv2.RANSAC, 
-            ransacReprojThreshold=3.0,  # 3像素的重投影误差阈值
-            maxIters=2000,              # 增加迭代次数以获得更好的结果
-            confidence=0.99             # 高置信度
-        )
-        
-        if M is None:
-            print("无法计算变换矩阵，使用简单平移")
-            # 使用简单的平移作为后备方案
-            M = np.array([
-                [1, 0, 0],
-                [0, 1, 0]
-            ], dtype=np.float32)
-        
-        # 执行仿射变换
-        if self.preserve_background and not self.force_reference_size:
-            # 如果保留背景且不强制使用参考图片尺寸，使用原图大小
-            h, w = image.shape[:2]
-            aligned = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
-        else:
-            # 否则裁剪为指定大小或参考图片大小
-            aligned = cv2.warpAffine(image, M, (crop_size[0], crop_size[1]), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
-        
-        # 如果是调试模式且有调试图像，返回带关键点的图像
-        if show_landmarks or self.debug:
-            if debug_image is not None:
-                return aligned, debug_image
-        
-        return aligned
-        
     def check_head_tilt(self, image):
         """检查头部倾斜度，返回是否端正和倾斜角度"""
-        # 获取面部关键点
-        face_landmarks = self._get_eye_points(image)
+        # 获取稳定的面部关键点
+        face_landmarks = self._get_stable_landmarks(image)
         if face_landmarks is None:
             return False, None, "未检测到面部关键点"
         
@@ -355,17 +402,14 @@ class HeadStabilizer:
         left_eye = face_landmarks['left_eye']
         right_eye = face_landmarks['right_eye']
         
-        # 计算双眼连线角度 - 只关注水平倾斜
+        # 计算双眼连线角度
         dx = right_eye[0] - left_eye[0]
         dy = right_eye[1] - left_eye[1]
-        
-        # 计算眼睛的水平倾斜角度
         horizontal_angle = np.degrees(np.arctan2(dy, dx))
         
-        # 简化判断: 只检查眼睛连线的水平倾斜度
+        # 判断是否倾斜
         is_tilted = abs(horizontal_angle) > self.tilt_threshold
         
-        # 返回结果和倾斜详情
         tilt_info = {
             'horizontal_angle': horizontal_angle,
             'threshold': self.tilt_threshold
