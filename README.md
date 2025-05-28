@@ -219,6 +219,36 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
+### 可执行文件下载
+
+本项目提供预编译的可执行文件，无需安装Python环境即可直接运行：
+
+#### 📦 自动化构建
+
+- **Windows**: `HeadAlignmentTool-Windows.zip` - 双击 `.exe` 文件即可运行
+- **macOS**: `HeadAlignmentTool-macOS.tar.gz` - 终端运行 `./HeadAlignmentTool`
+- **Linux**: `HeadAlignmentTool-Linux.tar.gz` - 终端运行 `./HeadAlignmentTool`
+
+#### 🚀 获取方式
+
+1. **从Release页面下载**（推荐）
+   - 访问项目的 [Releases](../../releases) 页面
+   - 下载最新版本对应平台的文件
+
+2. **自动化构建**
+   - 每次版本发布时自动构建所有平台
+   - 支持手动触发构建测试版本
+
+#### 💡 使用说明
+
+1. 下载对应平台的压缩包
+2. 解压到任意目录
+3. 运行可执行文件
+4. 等待应用启动（首次运行可能需要较长时间）
+5. 浏览器会自动打开应用界面
+
+详细说明请参考：[GitHub Actions部署说明.md](GitHub%20Actions部署说明.md)
+
 ### 云端部署
 
 支持部署到以下平台：

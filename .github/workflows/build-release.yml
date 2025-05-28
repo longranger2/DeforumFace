@@ -1,0 +1,290 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送版本标签时触发
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            executable_name: HeadAlignmentTool.exe
+            artifact_name: HeadAlignmentTool-Windows
+          - os: macos-latest
+            executable_name: HeadAlignmentTool
+            artifact_name: HeadAlignmentTool-macOS
+          - os: ubuntu-latest
+            executable_name: HeadAlignmentTool
+            artifact_name: HeadAlignmentTool-Linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Create hooks directory
+      run: mkdir -p hooks
+
+    - name: Create Streamlit hook (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        echo "from PyInstaller.utils.hooks import collect_data_files, collect_submodules" > hooks/hook-streamlit.py
+        echo "" >> hooks/hook-streamlit.py
+        echo "datas = collect_data_files('streamlit')" >> hooks/hook-streamlit.py
+        echo "hiddenimports = collect_submodules('streamlit')" >> hooks/hook-streamlit.py
+
+    - name: Create Streamlit hook (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cat > hooks/hook-streamlit.py << 'EOF'
+        from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+        datas = collect_data_files('streamlit')
+        hiddenimports = collect_submodules('streamlit')
+        EOF
+
+    - name: Get Python site-packages path
+      id: python-path
+      run: |
+        python -c "import site; print('site_packages=' + site.getsitepackages()[0])" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Create PyInstaller spec file
+      run: |
+        cat > HeadAlignmentTool.spec << 'EOF'
+        # -*- mode: python ; coding: utf-8 -*-
+        import os
+        import site
+
+        # 获取site-packages路径
+        site_packages = site.getsitepackages()[0]
+
+        block_cipher = None
+
+        a = Analysis(
+            ['run_streamlit.py'],
+            pathex=[],
+            binaries=[],
+            datas=[
+                ('streamlit_app.py', '.'),
+                ('head_stabilizer.py', '.'),
+                (os.path.join(site_packages, 'streamlit', 'static'), 'streamlit/static'),
+                (os.path.join(site_packages, 'streamlit', 'runtime'), 'streamlit/runtime'),
+                (os.path.join(site_packages, 'mediapipe', 'modules'), 'mediapipe/modules'),
+            ],
+            hiddenimports=[
+                'streamlit',
+                'streamlit.web.cli',
+                'streamlit.runtime.scriptrunner.magic_funcs',
+                'streamlit.runtime.caching.cache_data_api',
+                'streamlit.runtime.metrics_util',
+                'streamlit.components.v1.components',
+                'streamlit.external.langchain',
+                'mediapipe',
+                'cv2',
+                'numpy',
+                'PIL',
+                'PIL.Image',
+                'PIL.ImageDraw',
+                'PIL.ImageFont',
+            ],
+            hookspath=['hooks'],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='HeadAlignmentTool',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=True,
+            disable_windowed_traceback=False,
+            argv_emulation=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+        )
+        EOF
+
+    - name: Build executable
+      run: |
+        pyinstaller HeadAlignmentTool.spec --clean --noconfirm
+
+    - name: Create distribution directory
+      run: mkdir -p distribution
+
+    - name: Copy executable and create package (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        copy dist\HeadAlignmentTool.exe distribution\
+        echo "# Head Alignment Tool - Windows" > distribution\README.txt
+        echo "" >> distribution\README.txt
+        echo "运行方式：" >> distribution\README.txt
+        echo "1. 双击 HeadAlignmentTool.exe 启动应用" >> distribution\README.txt
+        echo "2. 等待应用启动（可能需要几秒钟）" >> distribution\README.txt
+        echo "3. 浏览器会自动打开 http://localhost:8501" >> distribution\README.txt
+        echo "4. 如果浏览器没有自动打开，请手动访问上述地址" >> distribution\README.txt
+        echo "" >> distribution\README.txt
+        echo "注意：首次运行可能需要较长时间，请耐心等待。" >> distribution\README.txt
+
+    - name: Copy executable and create package (macOS/Linux)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cp dist/HeadAlignmentTool distribution/
+        chmod +x distribution/HeadAlignmentTool
+        cat > distribution/README.txt << 'EOF'
+        # Head Alignment Tool - Unix
+
+        运行方式：
+        1. 打开终端
+        2. 进入此目录
+        3. 运行：./HeadAlignmentTool
+        4. 等待应用启动（可能需要几秒钟）
+        5. 浏览器会自动打开 http://localhost:8501
+        6. 如果浏览器没有自动打开，请手动访问上述地址
+
+        注意：首次运行可能需要较长时间，请耐心等待。
+        EOF
+
+    - name: Create archive (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd distribution
+        7z a -tzip ../HeadAlignmentTool-Windows.zip *
+
+    - name: Create archive (macOS/Linux)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd distribution
+        tar -czf ../HeadAlignmentTool-${{ matrix.artifact_name }}.tar.gz *
+
+    - name: Upload artifact (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: HeadAlignmentTool-Windows.zip
+
+    - name: Upload artifact (macOS/Linux)
+      if: matrix.os != 'windows-latest'
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: HeadAlignmentTool-${{ matrix.artifact_name }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Head Alignment Tool ${{ github.ref_name }}
+        body: |
+          ## Head Alignment Tool ${{ github.ref_name }}
+
+          ### 下载说明
+          - **Windows用户**: 下载 `HeadAlignmentTool-Windows.zip`，解压后双击 `HeadAlignmentTool.exe` 运行
+          - **macOS用户**: 下载 `HeadAlignmentTool-macOS.tar.gz`，解压后在终端运行 `./HeadAlignmentTool`
+          - **Linux用户**: 下载 `HeadAlignmentTool-Linux.tar.gz`，解压后在终端运行 `./HeadAlignmentTool`
+
+          ### 使用方法
+          1. 运行可执行文件
+          2. 等待应用启动（首次运行可能需要较长时间）
+          3. 浏览器会自动打开应用界面
+          4. 上传需要对齐的头部图片
+          5. 调整参数并下载处理结果
+
+          ### 系统要求
+          - Windows 10/11 (64位)
+          - macOS 10.14+ (Intel/Apple Silicon)
+          - Linux (64位，需要GUI支持)
+
+          ### 注意事项
+          - 首次运行时可能需要较长的启动时间
+          - 确保系统有足够的内存（建议4GB+）
+          - 如遇到问题，请查看项目README或提交Issue
+        draft: false
+        prerelease: false
+
+    - name: Upload Windows Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./HeadAlignmentTool-Windows/HeadAlignmentTool-Windows.zip
+        asset_name: HeadAlignmentTool-Windows.zip
+        asset_content_type: application/zip
+
+    - name: Upload macOS Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./HeadAlignmentTool-macOS/HeadAlignmentTool-HeadAlignmentTool-macOS.tar.gz
+        asset_name: HeadAlignmentTool-macOS.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload Linux Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./HeadAlignmentTool-Linux/HeadAlignmentTool-HeadAlignmentTool-Linux.tar.gz
+        asset_name: HeadAlignmentTool-Linux.tar.gz
+        asset_content_type: application/gzip 
