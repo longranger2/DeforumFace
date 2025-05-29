@@ -4,6 +4,8 @@
 
 本项目配置了GitHub Actions自动化工作流，可以自动构建Windows、macOS和Linux三个平台的可执行文件，并在创建版本标签时自动发布Release。
 
+**最新更新**: 已修复GitHub Actions版本兼容性问题，使用最新的Actions版本。
+
 ## 工作流文件
 
 ### 1. 主要发布工作流 (`.github/workflows/build-release.yml`)
@@ -17,6 +19,13 @@
 - 自动创建GitHub Release
 - 上传可执行文件到Release
 
+**使用的Actions版本：**
+- `actions/checkout@v4`
+- `actions/setup-python@v5`
+- `actions/upload-artifact@v4`
+- `actions/download-artifact@v4`
+- `softprops/action-gh-release@v2`
+
 ### 2. 测试构建工作流 (`.github/workflows/test-build.yml`)
 
 **触发条件：**
@@ -26,6 +35,11 @@
 - 选择单个平台进行测试构建
 - 验证构建过程是否正常
 - 上传构建产物作为临时文件
+
+**使用的Actions版本：**
+- `actions/checkout@v4`
+- `actions/setup-python@v5`
+- `actions/upload-artifact@v4`
 
 ## 使用方法
 
@@ -125,11 +139,15 @@ git push origin v1.0.0
    - 检查 `requirements.txt` 是否包含所有依赖
    - 查看Actions日志中的错误信息
 
-2. **可执行文件无法运行**
+2. **Actions版本兼容性问题**
+   - ✅ **已修复**: 更新到最新的Actions版本
+   - 如遇到类似 "Missing download info" 错误，说明Actions版本过旧
+
+3. **可执行文件无法运行**
    - 确保目标系统满足最低要求
    - 检查是否缺少系统依赖
 
-3. **文件过大**
+4. **文件过大**
    - 当前配置已优化，单个文件约150-200MB
    - 可以通过排除不必要的模块进一步优化
 
@@ -146,6 +164,24 @@ git push origin v1.0.0
 3. **本地测试**
    - 在本地环境复现构建过程
    - 使用相同的Python版本和依赖
+
+## 版本兼容性说明
+
+### GitHub Actions版本更新历史
+
+| 组件 | 旧版本 | 新版本 | 更新原因 |
+|------|--------|--------|----------|
+| setup-python | v4 | v5 | 兼容性和性能改进 |
+| upload-artifact | v3 | v4 | 修复下载信息缺失问题 |
+| download-artifact | v3 | v4 | 保持版本一致性 |
+| create-release | v1 | softprops/action-gh-release@v2 | 更现代化的Release管理 |
+
+### 兼容性保证
+
+- ✅ 支持最新的GitHub Actions运行器
+- ✅ 兼容Python 3.9+
+- ✅ 支持所有主流操作系统
+- ✅ 向后兼容现有的工作流
 
 ## 自定义配置
 
@@ -216,4 +252,24 @@ matrix:
 
 1. **定期测试**: 每月至少运行一次测试构建
 2. **依赖更新**: 定期更新Python依赖版本
-3. **文档更新**: 保持使用说明与实际功能同步 
+3. **Actions更新**: 关注GitHub Actions的版本更新
+4. **文档更新**: 保持使用说明与实际功能同步
+
+## 最新修复说明
+
+### 2024年修复内容
+
+1. **Actions版本更新**
+   - 修复 `actions/upload-artifact@v3` 兼容性问题
+   - 更新到 `actions/setup-python@v5`
+   - 使用现代化的 `softprops/action-gh-release@v2`
+
+2. **工作流优化**
+   - 简化Release创建流程
+   - 统一文件上传方式
+   - 改进错误处理机制
+
+3. **兼容性保证**
+   - 确保在最新的GitHub Actions运行器上正常工作
+   - 保持向后兼容性
+   - 提供清晰的错误信息 

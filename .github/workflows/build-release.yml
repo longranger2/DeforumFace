@@ -29,7 +29,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.9'
 
@@ -200,14 +200,14 @@ jobs:
 
     - name: Upload artifact (Windows)
       if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
         path: HeadAlignmentTool-Windows.zip
 
     - name: Upload artifact (macOS/Linux)
       if: matrix.os != 'windows-latest'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
         path: HeadAlignmentTool-${{ matrix.artifact_name }}.tar.gz
@@ -222,16 +222,14 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
 
     - name: Create Release
       id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
-        release_name: Head Alignment Tool ${{ github.ref_name }}
+        name: Head Alignment Tool ${{ github.ref_name }}
         body: |
           ## Head Alignment Tool ${{ github.ref_name }}
 
@@ -258,33 +256,7 @@ jobs:
           - 如遇到问题，请查看项目README或提交Issue
         draft: false
         prerelease: false
-
-    - name: Upload Windows Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./HeadAlignmentTool-Windows/HeadAlignmentTool-Windows.zip
-        asset_name: HeadAlignmentTool-Windows.zip
-        asset_content_type: application/zip
-
-    - name: Upload macOS Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./HeadAlignmentTool-macOS/HeadAlignmentTool-HeadAlignmentTool-macOS.tar.gz
-        asset_name: HeadAlignmentTool-macOS.tar.gz
-        asset_content_type: application/gzip
-
-    - name: Upload Linux Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./HeadAlignmentTool-Linux/HeadAlignmentTool-HeadAlignmentTool-Linux.tar.gz
-        asset_name: HeadAlignmentTool-Linux.tar.gz
-        asset_content_type: application/gzip 
+        files: |
+          HeadAlignmentTool-Windows/HeadAlignmentTool-Windows.zip
+          HeadAlignmentTool-macOS/HeadAlignmentTool-HeadAlignmentTool-macOS.tar.gz
+          HeadAlignmentTool-Linux/HeadAlignmentTool-HeadAlignmentTool-Linux.tar.gz 
