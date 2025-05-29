@@ -101,9 +101,16 @@ git push origin v1.0.0
 
 1. **Python环境**: Python 3.9
 2. **系统依赖**:
-   - Ubuntu: OpenGL、GUI相关库
+   - Ubuntu: OpenGL开发库、GUI相关库、GStreamer库
    - Windows: 无额外依赖
    - macOS: 无额外依赖
+
+**Ubuntu依赖包列表**:
+```bash
+libgl1-mesa-dev libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 libgstreamer1.0-0 libgstreamer-plugins-base1.0-0
+```
+
+**注意**: Ubuntu 24.04中 `libgl1-mesa-glx` 已被 `libgl1-mesa-dev` 替代。
 
 ### 构建步骤
 
@@ -264,12 +271,17 @@ matrix:
    - 更新到 `actions/setup-python@v5`
    - 使用现代化的 `softprops/action-gh-release@v2`
 
-2. **工作流优化**
+2. **Ubuntu 24.04兼容性修复**
+   - 修复 `libgl1-mesa-glx` 包不可用问题
+   - 更新为 `libgl1-mesa-dev` (Ubuntu 24.04新包名)
+   - 添加GStreamer相关依赖包
+
+3. **工作流优化**
    - 简化Release创建流程
    - 统一文件上传方式
    - 改进错误处理机制
 
-3. **兼容性保证**
+4. **兼容性保证**
    - 确保在最新的GitHub Actions运行器上正常工作
    - 保持向后兼容性
    - 提供清晰的错误信息 
