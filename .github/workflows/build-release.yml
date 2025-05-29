@@ -46,7 +46,10 @@ jobs:
         pip install pyinstaller
 
     - name: Create hooks directory
-      run: mkdir -p hooks
+      run: |
+        if [ -d "hooks" ]; then rm -rf hooks; fi
+        mkdir -p hooks
+      shell: bash
 
     - name: Create Streamlit hook (Windows)
       if: matrix.os == 'windows-latest'
