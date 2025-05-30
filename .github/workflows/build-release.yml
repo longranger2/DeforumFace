@@ -6,6 +6,12 @@ on:
       - 'v*'  # 当推送版本标签时触发
   workflow_dispatch:  # 允许手动触发
 
+# 添加权限设置
+permissions:
+  contents: write  # 允许写入仓库内容（创建release需要）
+  actions: read    # 允许读取actions
+  packages: write  # 允许写入packages（如果需要）
+
 jobs:
   build:
     strategy:
@@ -128,6 +134,12 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
 
+    - name: List downloaded files (debug)
+      run: |
+        echo "=== Current directory structure ==="
+        ls -la
+        find . -name "*.zip" -o -name "*.tar.gz" | head -10
+
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v2
@@ -161,6 +173,6 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          HeadAlignmentTool-Windows/HeadAlignmentTool-Windows.zip
-          HeadAlignmentTool-macOS/HeadAlignmentTool-HeadAlignmentTool-macOS.tar.gz
-          HeadAlignmentTool-Linux/HeadAlignmentTool-HeadAlignmentTool-Linux.tar.gz 
+          HeadAlignmentTool-Windows/*.zip
+          HeadAlignmentTool-macOS/*.tar.gz
+          HeadAlignmentTool-Linux/*.tar.gz 
