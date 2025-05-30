@@ -1,41 +1,47 @@
 #!/usr/bin/env python3
 """
-构建环境准备脚本
-为GitHub Actions创建PyInstaller spec文件和hook配置
+Build environment preparation script
+Creates PyInstaller spec file and hook configuration for GitHub Actions
 """
 
 import os
 import site
+import platform
 
 def main():
-    # 确保hooks目录存在（通常已经存在）
+    # Ensure hooks directory exists (usually already exists)
     if not os.path.exists('hooks'):
         print("Creating hooks directory...")
         os.makedirs('hooks')
         
-        # 只有在hooks目录不存在时才创建基本的hook文件
+        # Only create basic hook file if hooks directory doesn't exist
         print("Creating basic hook file...")
         hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = collect_data_files('streamlit')
 hiddenimports = collect_submodules('streamlit')
 """
-        with open('hooks/hook-streamlit.py', 'w') as f:
+        with open('hooks/hook-streamlit.py', 'w', encoding='utf-8') as f:
             f.write(hook_content)
     else:
         print("Using existing hooks directory and files")
     
-    # 获取site-packages路径
+    # Get site-packages path
     site_packages = site.getsitepackages()[0]
     print(f'Site packages: {site_packages}')
+    print(f'Platform: {platform.system()}')
     
-    # 创建PyInstaller spec文件
+    # Normalize path separators for cross-platform compatibility
+    # Convert to forward slashes and escape properly for Python strings
+    site_packages_escaped = site_packages.replace('\\', '\\\\')
+    
+    # Create PyInstaller spec file with proper cross-platform path handling
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 import os
 import site
 
-# 获取site-packages路径
-site_packages = r'{site_packages}'
+# Cross-platform site-packages path
+site_packages = r"{site_packages}"
 
 block_cipher = None
 
@@ -101,14 +107,27 @@ exe = EXE(
 )
 """
     
-    with open('HeadAlignmentTool.spec', 'w') as f:
-        f.write(spec_content)
+    # Write spec file with UTF-8 encoding
+    try:
+        with open('HeadAlignmentTool.spec', 'w', encoding='utf-8') as f:
+            f.write(spec_content)
+        print('✅ Build environment prepared successfully')
+    except UnicodeEncodeError as e:
+        print(f'❌ Encoding error: {e}')
+        # Fallback: write with platform default encoding
+        with open('HeadAlignmentTool.spec', 'w') as f:
+            f.write(spec_content)
+        print('✅ Build environment prepared with fallback encoding')
     
-    print('✅ Build environment prepared successfully')
     if os.path.exists('hooks/hook-streamlit.py'):
         print('✅ Using existing hooks/hook-streamlit.py file')
     
-    # 验证可执行文件是否存在的辅助函数
+    # Verify spec file was created
+    if os.path.exists('HeadAlignmentTool.spec'):
+        spec_size = os.path.getsize('HeadAlignmentTool.spec')
+        print(f'✅ Spec file created ({spec_size} bytes)')
+    
+    # Check if dist directory exists and show contents
     if os.path.exists('dist'):
         print('📁 Contents of dist directory:')
         for item in os.listdir('dist'):
