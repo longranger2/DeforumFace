@@ -111,25 +111,25 @@ exe = EXE(
     try:
         with open('HeadAlignmentTool.spec', 'w', encoding='utf-8') as f:
             f.write(spec_content)
-        print('✅ Build environment prepared successfully')
+        print('[SUCCESS] Build environment prepared successfully')
     except UnicodeEncodeError as e:
-        print(f'❌ Encoding error: {e}')
+        print(f'[ERROR] Encoding error: {e}')
         # Fallback: write with platform default encoding
         with open('HeadAlignmentTool.spec', 'w') as f:
             f.write(spec_content)
-        print('✅ Build environment prepared with fallback encoding')
+        print('[SUCCESS] Build environment prepared with fallback encoding')
     
     if os.path.exists('hooks/hook-streamlit.py'):
-        print('✅ Using existing hooks/hook-streamlit.py file')
+        print('[SUCCESS] Using existing hooks/hook-streamlit.py file')
     
     # Verify spec file was created
     if os.path.exists('HeadAlignmentTool.spec'):
         spec_size = os.path.getsize('HeadAlignmentTool.spec')
-        print(f'✅ Spec file created ({spec_size} bytes)')
+        print(f'[SUCCESS] Spec file created ({spec_size} bytes)')
     
     # Check if dist directory exists and show contents
     if os.path.exists('dist'):
-        print('📁 Contents of dist directory:')
+        print('[INFO] Contents of dist directory:')
         for item in os.listdir('dist'):
             print(f'  - {item}')
 
