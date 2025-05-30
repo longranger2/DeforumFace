@@ -8,6 +8,50 @@ import os
 import site
 import platform
 
+def find_site_packages():
+    """Find the correct site-packages directory across platforms"""
+    # Try multiple methods to find site-packages
+    candidates = []
+    
+    # Method 1: site.getsitepackages()
+    try:
+        candidates.extend(site.getsitepackages())
+    except:
+        pass
+    
+    # Method 2: site.getusersitepackages()
+    try:
+        candidates.append(site.getusersitepackages())
+    except:
+        pass
+    
+    # Method 3: Check common locations
+    import sys
+    python_root = sys.prefix
+    candidates.extend([
+        os.path.join(python_root, 'lib', 'site-packages'),
+        os.path.join(python_root, 'Lib', 'site-packages'),
+        os.path.join(python_root, 'site-packages'),
+    ])
+    
+    # Find the first candidate that actually contains streamlit
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            streamlit_path = os.path.join(candidate, 'streamlit')
+            if os.path.exists(streamlit_path):
+                print(f"Found site-packages with streamlit: {candidate}")
+                return candidate
+    
+    # If none found, return the first existing path
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            print(f"Using site-packages (no streamlit found): {candidate}")
+            return candidate
+    
+    # Fallback
+    print("Warning: Could not find site-packages, using sys.prefix")
+    return sys.prefix
+
 def main():
     # Ensure hooks directory exists (usually already exists)
     if not os.path.exists('hooks'):
@@ -26,22 +70,48 @@ hiddenimports = collect_submodules('streamlit')
     else:
         print("Using existing hooks directory and files")
     
-    # Get site-packages path
-    site_packages = site.getsitepackages()[0]
+    # Get site-packages path with better detection
+    site_packages = find_site_packages()
     print(f'Site packages: {site_packages}')
     print(f'Platform: {platform.system()}')
     
-    # Normalize path separators for cross-platform compatibility
-    # Convert to forward slashes and escape properly for Python strings
-    site_packages_escaped = site_packages.replace('\\', '\\\\')
+    # Check critical paths and build datas list dynamically
+    critical_paths = [
+        ('streamlit_app.py', '.'),
+        ('head_stabilizer.py', '.'),
+    ]
+    
+    # Check for streamlit static files
+    streamlit_static = os.path.join(site_packages, 'streamlit', 'static')
+    if os.path.exists(streamlit_static):
+        critical_paths.append((streamlit_static, 'streamlit/static'))
+        print(f"[EXISTS] streamlit/static: {streamlit_static}")
+    else:
+        print(f"[MISSING] streamlit/static: {streamlit_static}")
+    
+    # Check for streamlit runtime files
+    streamlit_runtime = os.path.join(site_packages, 'streamlit', 'runtime')
+    if os.path.exists(streamlit_runtime):
+        critical_paths.append((streamlit_runtime, 'streamlit/runtime'))
+        print(f"[EXISTS] streamlit/runtime: {streamlit_runtime}")
+    else:
+        print(f"[MISSING] streamlit/runtime: {streamlit_runtime}")
+    
+    # Check for mediapipe modules
+    mediapipe_modules = os.path.join(site_packages, 'mediapipe', 'modules')
+    if os.path.exists(mediapipe_modules):
+        critical_paths.append((mediapipe_modules, 'mediapipe/modules'))
+        print(f"[EXISTS] mediapipe/modules: {mediapipe_modules}")
+    else:
+        print(f"[MISSING] mediapipe/modules: {mediapipe_modules}")
+    
+    # Convert datas to spec format
+    datas_str = ",\n        ".join([f"(r'{src}', '{dst}')" for src, dst in critical_paths])
     
     # Create PyInstaller spec file with proper cross-platform path handling
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 import os
 import site
-
-# Cross-platform site-packages path
-site_packages = r"{site_packages}"
 
 block_cipher = None
 
@@ -50,11 +120,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('streamlit_app.py', '.'),
-        ('head_stabilizer.py', '.'),
-        (os.path.join(site_packages, 'streamlit', 'static'), 'streamlit/static'),
-        (os.path.join(site_packages, 'streamlit', 'runtime'), 'streamlit/runtime'),
-        (os.path.join(site_packages, 'mediapipe', 'modules'), 'mediapipe/modules'),
+        {datas_str},
     ],
     hiddenimports=[
         'streamlit',
