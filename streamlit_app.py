@@ -271,7 +271,7 @@ def process_images():
         st.session_state.current_index = 0
 
 def export_video():
-    """导出处理后的图片为视频"""
+    """导出处理后的图片为视频到程序运行目录"""
     if not st.session_state.processed_images:
         st.error("没有处理过的图片可以导出为视频")
         return
@@ -295,13 +295,9 @@ def export_video():
     
     codec_info = quality_map.get(quality, quality_map["高"])
     
-    # 构建输出路径
-    # 如果是通过上传的文件，则创建临时目录
-    if st.session_state.folder_path:
-        output_dir = os.path.join(st.session_state.folder_path, "videos")
-    else:
-        output_dir = os.path.join(os.path.expanduser("~"), "head_alignment_videos")
-    
+    # 使用当前程序运行目录
+    current_dir = os.getcwd()
+    output_dir = os.path.join(current_dir, "deforum_videos")
     os.makedirs(output_dir, exist_ok=True)
     
     output_path = os.path.join(output_dir, f"{filename}.{codec_info['ext']}")
@@ -351,7 +347,7 @@ def export_video():
         video.release()
         
         # 更新状态
-        st.success(f"视频已成功导出到: {output_path}")
+        st.success(f"✅ 视频已成功导出到当前目录")
         
         # 提供下载链接
         with open(output_path, "rb") as file:
@@ -366,17 +362,14 @@ def export_video():
         st.error(f"导出视频失败: {str(e)}")
 
 def save_all_images():
-    """保存所有处理过的图片"""
+    """保存所有处理过的图片到程序运行目录"""
     if not st.session_state.processed_images:
         st.error("没有处理过的图片可以保存")
         return
     
-    # 决定输出目录
-    if st.session_state.folder_path:
-        output_dir = os.path.join(st.session_state.folder_path, "aligned")
-    else:
-        output_dir = os.path.join(os.path.expanduser("~"), "head_alignment_output")
-    
+    # 使用当前程序运行目录
+    current_dir = os.getcwd()
+    output_dir = os.path.join(current_dir, "deforum_photos")
     os.makedirs(output_dir, exist_ok=True)
     
     # 创建进度条
@@ -410,11 +403,7 @@ def save_all_images():
         except Exception as e:
             st.error(f"保存图片失败 {i}: {str(e)}")
     
-    st.success(f"已保存所有 {count} 张图片到: {output_dir}")
-    
-    # 如果用户上传的图片，提供下载链接
-    if not st.session_state.folder_path and count > 0:
-        st.info("您可以从以下位置找到保存的图片：" + output_dir)
+    st.success(f"✅ 所有图片已保存到当前目录")
 
 def show_current_image():
     """在主界面显示当前图片"""
@@ -605,61 +594,90 @@ with st.sidebar:
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
-    # 参数设置
-    with st.expander("⚙️ 处理参数设置", expanded=True):
-        # 眼睛间距
-        st.subheader("眼睛间距")
-        st.caption("决定人脸在画面中的大小比例")
-        st.session_state.eye_distance = st.slider(
-            "眼睛间距百分比", 
-            min_value=15, 
-            max_value=45, 
-            value=30,
-            help="眼睛间的距离占据图片宽度的百分比"
+    # 参数设置 - 大幅简化
+    with st.expander("⚙️ 处理设置", expanded=True):
+        # 简单模式选择
+        st.markdown('<div class="sidebar-section-title">处理模式</div>', unsafe_allow_html=True)
+        
+        mode_choice = st.radio(
+            "选择处理模式",
+            options=["智能模式 (推荐)", "自定义设置"],
+            help="智能模式使用最佳默认参数，适合大多数用户"
         )
         
-        # 头部倾斜检测
-        st.subheader("头部倾斜检测")
-        st.caption("过滤掉头部不端正的照片")
-        st.session_state.filter_tilted = st.checkbox(
-            "启用头部倾斜筛选", 
-            value=True,
-            help="自动跳过头部倾斜的照片"
-        )
-        st.session_state.tilt_threshold = st.slider(
-            "倾斜阈值(度)", 
-            min_value=1, 
-            max_value=30, 
-            value=5,
-            help="允许的最大头部倾斜角度"
-        )
-        
-        # 其他选项
-        st.subheader("其他选项")
-        st.session_state.preserve_bg = st.checkbox(
-            "保留背景（不推荐）", 
-            value=False,
-            help="保留原始背景，但可能导致图片尺寸不一致"
-        )
-        st.session_state.debug_mode = st.checkbox(
-            "调试模式（显示关键点）", 
-            value=False,
-            help="在图片上显示检测到的面部关键点"
-        )
+        if mode_choice == "智能模式 (推荐)":
+            # 智能模式 - 只显示最重要的选项
+            st.session_state.eye_distance = 30
+            st.session_state.filter_tilted = True
+            st.session_state.tilt_threshold = 5
+            st.session_state.preserve_bg = False
+            st.session_state.debug_mode = False
+            
+            # 只保留头部倾斜筛选这一个重要选项
+            st.session_state.filter_tilted = st.checkbox(
+                "过滤倾斜头部的照片", 
+                value=True,
+                help="自动跳过头部明显倾斜的照片，推荐开启"
+            )
+            
+            st.info("💡 智能模式已为您优化所有参数，直接上传图片即可使用")
+            
+        else:
+            # 自定义模式 - 显示所有参数
+            st.warning("⚠️ 专家模式：请确保您了解这些参数的含义")
+            
+            # 眼睛间距
+            st.subheader("眼睛间距")
+            st.caption("决定人脸在画面中的大小比例，只有在参考图片没有设置的时候才会生效")
+            st.session_state.eye_distance = st.slider(
+                "眼睛间距百分比", 
+                min_value=15, 
+                max_value=45, 
+                value=30,
+                help="眼睛间的距离占据图片宽度的百分比"
+            )
+            
+            # 头部倾斜检测
+            st.subheader("头部倾斜检测")
+            st.caption("过滤掉头部不端正的照片")
+            st.session_state.filter_tilted = st.checkbox(
+                "启用头部倾斜筛选", 
+                value=True,
+                help="自动跳过头部倾斜的照片"
+            )
+            st.session_state.tilt_threshold = st.slider(
+                "倾斜阈值(度)", 
+                min_value=1, 
+                max_value=30, 
+                value=5,
+                help="允许的最大头部倾斜角度"
+            )
+            
+            # 其他选项
+            st.subheader("其他选项")
+            st.session_state.preserve_bg = st.checkbox(
+                "保留背景（不推荐）", 
+                value=False,
+                help="保留原始背景，但可能导致图片尺寸不一致"
+            )
+            st.session_state.debug_mode = st.checkbox(
+                "调试模式（显示关键点）", 
+                value=False,
+                help="在图片上显示检测到的面部关键点"
+            )
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
     # 视频导出设置
-    with st.expander("🎬 视频设置", expanded=False):
-        st.subheader("视频导出参数")
-        st.caption("设置导出视频的参数")
+    with st.expander("🎬 视频导出 (可选)", expanded=False):
+        st.caption("将处理后的图片制作成视频")
         
         fps_options = [2, 4, 8, 16, 32, 64]
         st.session_state.video_fps = st.select_slider(
-            "帧率 (FPS)", 
+            "播放速度", 
             options=fps_options, 
             value=st.session_state.video_fps,
-            help="视频每秒的帧数"
+            help="数值越高播放越快"
         )
         
         quality_options = ["低", "中", "高"]
@@ -667,19 +685,19 @@ with st.sidebar:
             "视频质量", 
             options=quality_options, 
             index=quality_options.index(st.session_state.video_quality),
-            help="视频编码质量"
+            horizontal=True
         )
         
         st.session_state.video_loop = st.checkbox(
-            "循环播放 (生成来回的序列)", 
+            "来回循环播放", 
             value=st.session_state.video_loop,
-            help="视频播放到最后一帧后会倒序回到第一帧"
+            help="播放到最后会倒序回到开头"
         )
         
         st.session_state.video_filename = st.text_input(
-            "输出文件名", 
+            "文件名", 
             value=st.session_state.video_filename,
-            help="视频文件名称（不含扩展名）"
+            placeholder="输入视频文件名"
         )
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -689,7 +707,7 @@ with st.sidebar:
         has_images = len(st.session_state.image_paths) > 0 or len(st.session_state.uploaded_files) > 0
         
         if st.button(
-            "重新处理所有图片", 
+            "处理所有图片", 
             type="primary", 
             disabled=not has_images,
             help="根据当前设置处理所有图片"
@@ -718,7 +736,7 @@ with st.sidebar:
             if st.button(
                 "保存所有图片", 
                 disabled=not st.session_state.processed_images,
-                help="将所有处理后的图片保存到本地"
+                help="将所有处理后的图片保存到程序目录"
             ):
                 save_all_images()
         
@@ -726,7 +744,7 @@ with st.sidebar:
             if st.button(
                 "导出为视频", 
                 disabled=not st.session_state.processed_images,
-                help="将所有处理后的图片导出为视频"
+                help="将所有处理后的图片导出为视频到程序目录"
             ):
                 export_video()
     
@@ -750,12 +768,12 @@ if st.session_state.processed_images:
             next_image()
 else:
     if st.session_state.image_paths or st.session_state.uploaded_files:
-        st.info("请点击「重新处理所有图片」按钮开始处理")
+        st.info("请点击「处理所有图片」按钮开始处理")
         st.markdown("""
         <div style="display: flex; justify-content: center; margin-top: 2rem;">
             <div style="text-align: center; max-width: 600px;">
                 <img src="https://oss.streamlit.io/images/brand/streamlit-mark-color.png" width="100">
-                <p style="margin-top: 1rem; color: #888;">准备就绪，点击侧边栏中的"重新处理所有图片"按钮开始处理</p>
+                <p style="margin-top: 1rem; color: #888;">准备就绪，点击侧边栏中的"处理所有图片"按钮开始处理</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
