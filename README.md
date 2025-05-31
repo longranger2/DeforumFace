@@ -361,16 +361,28 @@ def _validate_alignment_quality(self, M, src_landmarks, dst_landmarks):
 如果可执行文件无法正常工作，可以尝试：
 
 1. **使用Python环境运行**:
-   ```cmd
+   ```bash
    # 安装Python 3.9+
-   # 安装依赖
    pip install -r requirements.txt
    
-   # 运行应用
+   # 推荐启动方式（有依赖检查）
+   python run.py
+   
+   # 或直接启动
    streamlit run streamlit_app.py
    ```
 
-2. **使用Docker**（如果有Docker环境）:
+2. **Windows用户专用方案**:
+   ```cmd
+   # 双击运行 run_windows.bat
+   # 该脚本会自动：
+   # - 检查Python环境
+   # - 创建虚拟环境
+   # - 安装所需依赖
+   # - 启动应用
+   ```
+
+3. **使用Docker**（如果有Docker环境）:
    ```cmd
    # 构建镜像
    docker build -t head-alignment-tool .
