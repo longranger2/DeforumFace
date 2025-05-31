@@ -31,6 +31,9 @@ LANGUAGES = {
         # 文件上传
         "select_images": "选择图片文件（支持多选）",
         "select_images_help": "可以一次选择多个图片文件",
+        "clear_images": "清空所有图片",
+        "clear_images_help": "清空已上传的图片，重新选择",
+        "images_cleared": "已清空所有上传的图片",
         "folder_path": "图片文件夹路径",
         "folder_path_placeholder": "输入文件夹路径，如: /Users/username/photos",
         "folder_path_help": "指定包含图片的文件夹路径",
@@ -168,6 +171,9 @@ LANGUAGES = {
         # File upload
         "select_images": "Select image files (multiple selection supported)",
         "select_images_help": "You can select multiple image files at once",
+        "clear_images": "Clear All Images",
+        "clear_images_help": "Clear all uploaded images, reselect",
+        "images_cleared": "All uploaded images cleared",
         "folder_path": "Image folder path",
         "folder_path_placeholder": "Enter folder path, e.g.: /Users/username/photos",
         "folder_path_help": "Specify the folder path containing images",
@@ -384,6 +390,8 @@ if 'processed_images' not in st.session_state:
     st.session_state.is_processed = False
     st.session_state.uploaded_files = []
     st.session_state.language = '中文'  # 默认语言
+    st.session_state.uploader_key = 0  # 用于重置file_uploader
+    st.session_state.cleared_status = False  # 用于显示清空成功消息
 
 # 视频导出设置的默认值
 if 'video_fps' not in st.session_state:
@@ -799,18 +807,36 @@ with st.sidebar:
         source_tab1, source_tab2 = st.tabs([get_text("upload_images"), get_text("specify_folder")])
         
         with source_tab1:
-            st.markdown('<div class="file-uploader">', unsafe_allow_html=True)
+            
+            # 显示清空成功消息
+            if st.session_state.cleared_status:
+                st.success(get_text("images_cleared"))
+                st.session_state.cleared_status = False  # 重置状态
+            
             uploaded_files = st.file_uploader(
                 get_text("select_images"), 
                 type=["jpg", "jpeg", "png"], 
                 accept_multiple_files=True,
-                help=get_text("select_images_help")
+                help=get_text("select_images_help"),
+                key=f"uploader_{st.session_state.uploader_key}"
             )
             st.markdown('</div>', unsafe_allow_html=True)
             
             if uploaded_files:
                 st.session_state.uploaded_files = uploaded_files
                 st.success(get_text("uploaded_count", len(uploaded_files)))
+                
+                # 添加清空按钮
+                if st.button(
+                    get_text("clear_images"),
+                    help=get_text("clear_images_help"),
+                    key=f"clear_uploaded_images_{st.session_state.uploader_key}"
+                ):
+                    # 只清空上传的文件
+                    st.session_state.uploaded_files = []
+                    st.session_state.uploader_key += 1
+                    st.session_state.cleared_status = True
+                    st.rerun()
         
         with source_tab2:
             folder_path = st.text_input(
