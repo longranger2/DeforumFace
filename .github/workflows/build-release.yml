@@ -51,14 +51,79 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
 
+    - name: Debug environment (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        echo "=== Python Environment ==="
+        python --version
+        pip list | findstr -i "mediapipe streamlit opencv"
+        echo "=== Site Packages ==="
+        python -c "import site; print('Site packages:', site.getsitepackages())"
+        echo "=== MediaPipe Check ==="
+        python -c "import mediapipe as mp; import os; print('MediaPipe path:', os.path.dirname(mp.__file__))"
+        echo "=== OpenCV Check ==="
+        python -c "import cv2; print('OpenCV version:', cv2.__version__)"
+
+    - name: Debug environment (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        echo "=== Python Environment ==="
+        python --version
+        pip list | grep -i -E "(mediapipe|streamlit|opencv)"
+        echo "=== Site Packages ==="
+        python -c "import site; print('Site packages:', site.getsitepackages())"
+        echo "=== MediaPipe Check ==="
+        python -c "import mediapipe as mp; import os; print('MediaPipe path:', os.path.dirname(mp.__file__))"
+        echo "=== OpenCV Check ==="
+        python -c "import cv2; print('OpenCV version:', cv2.__version__)"
+
     - name: Prepare build environment
       run: python prepare_build.py
+
+    - name: Debug spec file
+      run: |
+        echo "=== Generated Spec File ==="
+        cat HeadAlignmentTool.spec
 
     - name: Build executable
       run: pyinstaller HeadAlignmentTool.spec --clean --noconfirm
 
     - name: Check build result
       run: python -c "import os; print('Build completed!'); [print(f'  - {item}') for item in os.listdir('dist')] if os.path.exists('dist') else print('❌ dist directory not found')"
+
+    - name: Test executable (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        echo "=== Testing Windows executable ==="
+        cd dist
+        dir
+        echo "=== Checking executable dependencies ==="
+        # 简单测试：检查文件是否存在且可执行
+        if (Test-Path "HeadAlignmentTool.exe") {
+          echo "✅ Executable exists"
+          # 获取文件大小
+          $size = (Get-Item "HeadAlignmentTool.exe").Length / 1MB
+          echo "📦 Size: $([math]::Round($size, 2)) MB"
+        } else {
+          echo "❌ Executable not found"
+          exit 1
+        }
+
+    - name: Test executable (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        echo "=== Testing Unix executable ==="
+        cd dist
+        ls -la
+        if [ -f "HeadAlignmentTool" ]; then
+          echo "✅ Executable exists"
+          size=$(du -m HeadAlignmentTool | cut -f1)
+          echo "📦 Size: ${size} MB"
+          chmod +x HeadAlignmentTool
+        else
+          echo "❌ Executable not found"
+          exit 1
+        fi
 
     - name: Create distribution directory
       run: mkdir -p distribution
@@ -76,6 +141,7 @@ jobs:
         echo "4. 如果浏览器没有自动打开，请手动访问上述地址" >> distribution\README.txt
         echo "" >> distribution\README.txt
         echo "注意：首次运行可能需要较长时间，请耐心等待。" >> distribution\README.txt
+        echo "如果遇到问题，请检查Windows Defender是否阻止了程序运行。" >> distribution\README.txt
 
     - name: Copy executable and create package (macOS/Linux)
       if: matrix.os != 'windows-latest'
@@ -169,7 +235,13 @@ jobs:
           ### 注意事项
           - 首次运行时可能需要较长的启动时间
           - 确保系统有足够的内存（建议4GB+）
+          - Windows用户：如果Windows Defender阻止程序运行，请添加信任
           - 如遇到问题，请查看项目README或提交Issue
+
+          ### 已知问题修复
+          - 修复了Windows版本的MediaPipe依赖问题
+          - 改进了跨平台路径处理
+          - 增强了错误诊断和调试信息
         draft: false
         prerelease: false
         files: |

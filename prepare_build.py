@@ -7,6 +7,7 @@ Creates PyInstaller spec file and hook configuration for GitHub Actions
 import os
 import site
 import platform
+import sys
 
 def find_site_packages():
     """Find the correct site-packages directory across platforms"""
@@ -26,7 +27,6 @@ def find_site_packages():
         pass
     
     # Method 3: Check common locations
-    import sys
     python_root = sys.prefix
     candidates.extend([
         os.path.join(python_root, 'lib', 'site-packages'),
@@ -51,6 +51,25 @@ def find_site_packages():
     # Fallback
     print("Warning: Could not find site-packages, using sys.prefix")
     return sys.prefix
+
+def get_windows_mediapipe_binaries():
+    """Get Windows-specific MediaPipe binary files"""
+    binaries = []
+    site_packages = find_site_packages()
+    
+    # MediaPipe binary files for Windows
+    mediapipe_path = os.path.join(site_packages, 'mediapipe')
+    if os.path.exists(mediapipe_path):
+        # Look for DLL files
+        for root, dirs, files in os.walk(mediapipe_path):
+            for file in files:
+                if file.endswith(('.dll', '.pyd')):
+                    full_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(full_path, site_packages)
+                    binaries.append((full_path, os.path.dirname(rel_path)))
+                    print(f"[BINARY] Found: {rel_path}")
+    
+    return binaries
 
 def main():
     # Ensure hooks directory exists (usually already exists)
@@ -105,24 +124,30 @@ hiddenimports = collect_submodules('streamlit')
     else:
         print(f"[MISSING] mediapipe/modules: {mediapipe_modules}")
     
-    # Convert datas to spec format
-    datas_str = ",\n        ".join([f"(r'{src}', '{dst}')" for src, dst in critical_paths])
+    # Windows-specific MediaPipe data files
+    if platform.system() == 'Windows':
+        mediapipe_data = os.path.join(site_packages, 'mediapipe', 'python', 'solutions')
+        if os.path.exists(mediapipe_data):
+            critical_paths.append((mediapipe_data, 'mediapipe/python/solutions'))
+            print(f"[EXISTS] mediapipe/python/solutions: {mediapipe_data}")
     
-    # Create PyInstaller spec file with proper cross-platform path handling
-    spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
-import os
-import site
-
-block_cipher = None
-
-a = Analysis(
-    ['run_streamlit.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        {datas_str},
-    ],
-    hiddenimports=[
+    # Convert datas to spec format with proper path escaping
+    datas_str = ",\n        ".join([f"(r'{src}', r'{dst}')" for src, dst in critical_paths])
+    
+    # Get Windows-specific binaries
+    binaries_list = []
+    if platform.system() == 'Windows':
+        binaries_list = get_windows_mediapipe_binaries()
+    
+    binaries_str = ""
+    if binaries_list:
+        binaries_str = ",\n        ".join([f"(r'{src}', r'{dst}')" for src, dst in binaries_list])
+        binaries_str = f"[\n        {binaries_str}\n    ]"
+    else:
+        binaries_str = "[]"
+    
+    # Enhanced hidden imports for Windows
+    hidden_imports = [
         'streamlit',
         'streamlit.web.cli',
         'streamlit.runtime.scriptrunner.magic_funcs',
@@ -131,12 +156,48 @@ a = Analysis(
         'streamlit.components.v1.components',
         'streamlit.external.langchain',
         'mediapipe',
+        'mediapipe.python',
+        'mediapipe.python.solutions',
+        'mediapipe.python.solutions.face_mesh',
+        'mediapipe.python.solutions.drawing_utils',
+        'mediapipe.python.solutions.drawing_styles',
         'cv2',
         'numpy',
         'PIL',
         'PIL.Image',
         'PIL.ImageDraw',
         'PIL.ImageFont',
+    ]
+    
+    # Windows-specific imports
+    if platform.system() == 'Windows':
+        hidden_imports.extend([
+            'mediapipe.python._framework_bindings',
+            'google.protobuf',
+            'google.protobuf.internal',
+            'google.protobuf.pyext',
+            'google.protobuf.pyext._message',
+        ])
+    
+    hidden_imports_str = ",\n        ".join([f"'{imp}'" for imp in hidden_imports])
+    
+    # Create PyInstaller spec file with proper cross-platform path handling
+    spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
+import os
+import site
+import platform
+
+block_cipher = None
+
+a = Analysis(
+    ['run_streamlit.py'],
+    pathex=[],
+    binaries={binaries_str},
+    datas=[
+        {datas_str},
+    ],
+    hiddenimports=[
+        {hidden_imports_str},
     ],
     hookspath=['hooks'],
     hooksconfig={{}},
