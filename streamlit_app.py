@@ -5,7 +5,10 @@ import os
 import glob
 from PIL import Image
 import io
+from datetime import datetime, timedelta
 from head_stabilizer import HeadStabilizer
+import PIL.ExifTags
+import re
 
 # 语言配置
 LANGUAGES = {
@@ -27,6 +30,46 @@ LANGUAGES = {
         "processing_mode": "处理模式",
         "video_export": "🎬 视频导出 (可选)",
         "operations": "🚀 操作",
+        
+        # 日期设置
+        "date_settings": "📅 日期水印设置 (可选)",
+        "enable_date_naming": "在图片上显示日期",
+        "enable_date_naming_help": "在处理后的图片上叠加显示日期信息，便于视频播放时查看",
+        "start_date": "第一张照片的日期",
+        "start_date_help": "请选择第一张照片对应的日期，后续照片将按顺序递增",
+        "date_interval": "日期间隔（天）",
+        "date_interval_help": "每张照片之间的日期间隔天数",
+        "date_format": "日期格式",
+        "date_format_help": "选择日期在图片上的显示格式",
+        "date_preview": "日期预览",
+        "date_source": "日期来源",
+        "date_source_help": "选择日期信息的来源方式",
+        "date_from_input": "用户输入（推荐）",
+        "date_from_filename": "从文件名解析",
+        "date_from_metadata": "从文件元数据",
+        "auto_sort_by_date": "按日期自动排序",
+        "auto_sort_help": "处理图片前按日期顺序排序，确保时间顺序正确",
+        "date_parse_pattern": "日期解析模式",
+        "date_parse_pattern_help": "选择文件名中日期的格式模式",
+        "sort_order": "排序方式",
+        "sort_ascending": "从早到晚",
+        "sort_descending": "从晚到早",
+        "date_position": "日期位置",
+        "date_position_help": "选择日期在图片上的显示位置",
+        "position_top_left": "左上角",
+        "position_top_right": "右上角", 
+        "position_bottom_left": "左下角",
+        "position_bottom_right": "右下角",
+        "date_style": "日期样式",
+        "date_style_help": "设置日期文字的样式",
+        "font_size": "字体大小",
+        "font_color": "字体颜色",
+        "background_opacity": "背景透明度",
+        "date_margin": "边距",
+        "white": "白色",
+        "black": "黑色",
+        "yellow": "黄色",
+        "red": "红色",
         
         # 文件上传
         "select_images": "选择图片文件（支持多选）",
@@ -147,6 +190,15 @@ LANGUAGES = {
         "medium": "中",
         "high": "高",
         "language": "🌐 语言",
+        
+        # 新增的翻译键
+        "date_format_section": "📅 日期格式设置",
+        "watermark_style_section": "🎨 水印样式设置", 
+        "font_size_help": "字体大小（图片宽度的百分比）",
+        "font_color_help": "选择字体颜色",
+        "background_opacity_help": "背景透明度，0为无背景（纯文字），1为完全不透明背景",
+        "date_margin_help": "日期距离图片边缘的距离（像素）",
+        "metadata_info": "📸 将从图片的EXIF数据中提取拍摄日期信息",
     },
     
     "English": {
@@ -167,6 +219,46 @@ LANGUAGES = {
         "processing_mode": "Processing Mode",
         "video_export": "🎬 Video Export (Optional)",
         "operations": "🚀 Operations",
+        
+        # Date settings
+        "date_settings": "📅 Date Settings (Optional)",
+        "enable_date_naming": "Add Date to Image Filenames",
+        "enable_date_naming_help": "Enable this to include date information in saved image filenames",
+        "start_date": "Date of First Photo",
+        "start_date_help": "Please select the date of the first photo, subsequent photos will be incremented sequentially",
+        "date_interval": "Date Interval (Days)",
+        "date_interval_help": "Number of days between photos",
+        "date_format": "Date Format",
+        "date_format_help": "Select date display format in filenames",
+        "date_preview": "Filename Preview",
+        "date_source": "Date Source",
+        "date_source_help": "Select date information source method",
+        "date_from_input": "User Input (Recommended)",
+        "date_from_filename": "Parse from Filename",
+        "date_from_metadata": "Parse from File Metadata",
+        "auto_sort_by_date": "Auto Sort by Date",
+        "auto_sort_help": "Sort images by date before processing to ensure correct time order",
+        "date_parse_pattern": "Date Parse Pattern",
+        "date_parse_pattern_help": "Select date format pattern in filenames",
+        "sort_order": "Sort Order",
+        "sort_ascending": "From Early to Late",
+        "sort_descending": "From Late to Early",
+        "date_position": "Date Position",
+        "date_position_help": "Select date display position on image",
+        "position_top_left": "Top Left",
+        "position_top_right": "Top Right", 
+        "position_bottom_left": "Bottom Left",
+        "position_bottom_right": "Bottom Right",
+        "date_style": "Date Style",
+        "date_style_help": "Set date text style",
+        "font_size": "Font Size",
+        "font_color": "Font Color",
+        "background_opacity": "Background Opacity",
+        "date_margin": "Margin",
+        "white": "White",
+        "black": "Black",
+        "yellow": "Yellow",
+        "red": "Red",
         
         # File upload
         "select_images": "Select image files (multiple selection supported)",
@@ -287,6 +379,15 @@ LANGUAGES = {
         "medium": "Medium",
         "high": "High",
         "language": "🌐 Language",
+        
+        # 新增的翻译键
+        "date_format_section": "📅 Date Format Settings",
+        "watermark_style_section": "🎨 Watermark Style Settings",
+        "font_size_help": "Font size (percentage of image width)",
+        "font_color_help": "Select font color",
+        "background_opacity_help": "Background opacity, 0 for no background (text only), 1 for fully opaque background",
+        "date_margin_help": "Distance from date text to image edge (pixels)",
+        "metadata_info": "📸 Extract shooting date information from image EXIF data",
     }
 }
 
@@ -297,6 +398,169 @@ def get_text(key, *args):
     if args:
         return text.format(*args)
     return text
+
+def parse_date_from_filename(filename, pattern):
+    """从文件名中解析日期"""
+    try:
+        # 移除文件扩展名
+        name_without_ext = os.path.splitext(filename)[0]
+        
+        if pattern == "YYYY-MM-DD":
+            match = re.search(r'(\d{4})-(\d{2})-(\d{2})', name_without_ext)
+            if match:
+                return datetime.strptime(f"{match.group(1)}-{match.group(2)}-{match.group(3)}", "%Y-%m-%d").date()
+        elif pattern == "YYYY_MM_DD":
+            match = re.search(r'(\d{4})_(\d{2})_(\d{2})', name_without_ext)
+            if match:
+                return datetime.strptime(f"{match.group(1)}-{match.group(2)}-{match.group(3)}", "%Y-%m-%d").date()
+        elif pattern == "YYYYMMDD":
+            match = re.search(r'(\d{8})', name_without_ext)
+            if match:
+                return datetime.strptime(match.group(1), "%Y%m%d").date()
+        elif pattern == "MM-DD-YYYY":
+            match = re.search(r'(\d{2})-(\d{2})-(\d{4})', name_without_ext)
+            if match:
+                return datetime.strptime(f"{match.group(3)}-{match.group(1)}-{match.group(2)}", "%Y-%m-%d").date()
+        elif pattern == "DD-MM-YYYY":
+            match = re.search(r'(\d{2})-(\d{2})-(\d{4})', name_without_ext)
+            if match:
+                return datetime.strptime(f"{match.group(3)}-{match.group(2)}-{match.group(1)}", "%Y-%m-%d").date()
+    except:
+        pass
+    return None
+
+def get_exif_date(image_path):
+    """从图片EXIF数据中获取拍摄日期"""
+    try:
+        image = Image.open(image_path)
+        exifdata = image.getexif()
+        
+        # 尝试获取拍摄日期
+        for tag_id in exifdata:
+            tag = PIL.ExifTags.TAGS.get(tag_id, tag_id)
+            if tag in ['DateTime', 'DateTimeOriginal', 'DateTimeDigitized']:
+                date_str = exifdata.get(tag_id)
+                if date_str:
+                    # EXIF日期格式通常是 "YYYY:MM:DD HH:MM:SS"
+                    return datetime.strptime(date_str.split()[0], "%Y:%m:%d").date()
+    except:
+        pass
+    return None
+
+def sort_images_by_date(image_paths, uploaded_files=None):
+    """根据日期对图片进行排序"""
+    image_with_dates = []
+    
+    # 处理文件路径
+    for path in image_paths:
+        if st.session_state.date_source == "date_from_filename":
+            date = parse_date_from_filename(os.path.basename(path), st.session_state.date_parse_pattern)
+        elif st.session_state.date_source == "date_from_metadata":
+            date = get_exif_date(path)
+        else:
+            date = None
+        
+        image_with_dates.append((path, date, "file"))
+    
+    # 处理上传文件
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            if st.session_state.date_source == "date_from_filename":
+                date = parse_date_from_filename(uploaded_file.name, st.session_state.date_parse_pattern)
+            elif st.session_state.date_source == "date_from_metadata":
+                # 对于上传文件，暂时无法直接读取EXIF，使用文件名fallback
+                date = parse_date_from_filename(uploaded_file.name, st.session_state.date_parse_pattern)
+            else:
+                date = None
+            
+            image_with_dates.append((uploaded_file, date, "upload"))
+    
+    # 按日期排序
+    if st.session_state.auto_sort_by_date:
+        # 有日期的在前，无日期的在后
+        dated_items = [(item, date, type_) for item, date, type_ in image_with_dates if date is not None]
+        undated_items = [(item, date, type_) for item, date, type_ in image_with_dates if date is None]
+        
+        # 排序有日期的项目
+        reverse = st.session_state.sort_order == "sort_descending"
+        dated_items.sort(key=lambda x: x[1], reverse=reverse)
+        
+        # 合并结果
+        sorted_items = dated_items + undated_items
+    else:
+        sorted_items = image_with_dates
+    
+    # 分离文件路径和上传文件
+    sorted_paths = [item[0] for item in sorted_items if item[2] == "file"]
+    sorted_uploads = [item[0] for item in sorted_items if item[2] == "upload"]
+    
+    return sorted_paths, sorted_uploads
+
+def add_date_watermark(image, date_str, position, font_size, font_color, background_opacity, margin):
+    """在图片上添加日期水印"""
+    if not date_str:
+        return image
+    
+    # 复制图片以避免修改原图
+    img_with_date = image.copy()
+    h, w = img_with_date.shape[:2]
+    
+    # 设置字体
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    # 根据图片宽度的百分比计算字体大小
+    font_scale = (font_size / 100.0) * (w / 100.0)  # font_size现在是百分比
+    thickness = max(1, int(font_scale * 2))
+    
+    # 获取文字尺寸
+    (text_width, text_height), baseline = cv2.getTextSize(date_str, font, font_scale, thickness)
+    
+    # 根据位置计算坐标
+    if position == "position_top_left":
+        x = margin
+        y = margin + text_height
+    elif position == "position_top_right":
+        x = w - text_width - margin
+        y = margin + text_height
+    elif position == "position_bottom_left":
+        x = margin
+        y = h - margin
+    else:  # position_bottom_right
+        x = w - text_width - margin
+        y = h - margin
+    
+    # 颜色映射
+    color_map = {
+        "white": (255, 255, 255),
+        "black": (0, 0, 0),
+        "yellow": (0, 255, 255),
+        "red": (0, 0, 255)
+    }
+    text_color = color_map.get(font_color, (255, 255, 255))
+    
+    # 添加半透明背景
+    if background_opacity > 0:
+        # 创建背景矩形
+        padding = 5
+        bg_x1 = max(0, x - padding)
+        bg_y1 = max(0, y - text_height - padding)
+        bg_x2 = min(w, x + text_width + padding)
+        bg_y2 = min(h, y + padding)
+        
+        # 根据字体颜色选择背景颜色（对比色）
+        if font_color in ["white", "yellow"]:
+            bg_color = (0, 0, 0)  # 亮色字体用黑色背景
+        else:
+            bg_color = (255, 255, 255)  # 暗色字体用白色背景
+        
+        # 创建半透明背景
+        overlay = img_with_date.copy()
+        cv2.rectangle(overlay, (bg_x1, bg_y1), (bg_x2, bg_y2), bg_color, -1)
+        cv2.addWeighted(overlay, background_opacity, img_with_date, 1 - background_opacity, 0, img_with_date)
+    
+    # 添加文字
+    cv2.putText(img_with_date, date_str, (x, y), font, font_scale, text_color, thickness, cv2.LINE_AA)
+    
+    return img_with_date
 
 # 设置页面配置 - 保持最小化但必要的设置
 st.set_page_config(
@@ -400,6 +664,22 @@ if 'video_fps' not in st.session_state:
     st.session_state.video_loop = False
     st.session_state.video_filename = "aligned_video"
 
+# 日期设置的默认值
+if 'enable_date_naming' not in st.session_state:
+    st.session_state.enable_date_naming = False
+    st.session_state.start_date = None
+    st.session_state.date_interval_days = 1
+    st.session_state.date_format = "YYYY-MM-DD"
+    st.session_state.date_source = "date_from_input"
+    st.session_state.auto_sort_by_date = True
+    st.session_state.date_parse_pattern = "YYYY-MM-DD"
+    st.session_state.sort_order = "sort_ascending"
+    st.session_state.date_position = "position_bottom_right"
+    st.session_state.font_size = 8.0
+    st.session_state.font_color = "white"
+    st.session_state.background_opacity = 0.0
+    st.session_state.date_margin = 20
+
 def initialize_stabilizer(output_size=(512, 512)):
     """初始化HeadStabilizer实例"""
     if st.session_state.stabilizer is None:
@@ -449,6 +729,12 @@ def process_images():
     if not st.session_state.image_paths and not st.session_state.uploaded_files:
         st.error(get_text("no_images_to_process"))
         return
+    
+    # 如果启用了日期排序，先对图片进行排序
+    if st.session_state.enable_date_naming and st.session_state.auto_sort_by_date and st.session_state.date_source != "date_from_input":
+        sorted_paths, sorted_uploads = sort_images_by_date(st.session_state.image_paths, st.session_state.uploaded_files)
+        st.session_state.image_paths = sorted_paths
+        st.session_state.uploaded_files = sorted_uploads
     
     # 初始化或更新稳定器
     initialize_stabilizer()
@@ -510,6 +796,47 @@ def process_images():
             else:
                 aligned = st.session_state.stabilizer.align_and_crop_face(img)
             
+            # 添加日期水印（如果启用）
+            if st.session_state.enable_date_naming:
+                date_str = None
+                current_image_index = len(processed_images)  # 当前图片的索引
+                
+                # 根据不同的日期来源获取日期
+                if st.session_state.date_source == "date_from_input" and st.session_state.start_date:
+                    # 用户输入模式：按顺序递增
+                    current_date = st.session_state.start_date + timedelta(days=current_image_index * st.session_state.date_interval_days)
+                    
+                elif st.session_state.date_source == "date_from_filename":
+                    # 从文件名解析日期
+                    filename_to_parse = os.path.basename(img_path)
+                    current_date = parse_date_from_filename(filename_to_parse, st.session_state.date_parse_pattern)
+                        
+                elif st.session_state.date_source == "date_from_metadata":
+                    # 从EXIF数据获取日期
+                    current_date = get_exif_date(img_path)
+                else:
+                    current_date = None
+                
+                # 格式化日期字符串
+                if current_date:
+                    if st.session_state.date_format == "YYYY-MM-DD":
+                        date_str = current_date.strftime("%Y-%m-%d")
+                    elif st.session_state.date_format == "MM-DD-YYYY":
+                        date_str = current_date.strftime("%m-%d-%Y")
+                    else:  # DD-MM-YYYY
+                        date_str = current_date.strftime("%d-%m-%Y")
+                
+                # 添加水印
+                if date_str:
+                    aligned = add_date_watermark(
+                        aligned, date_str, 
+                        st.session_state.date_position,
+                        st.session_state.font_size,
+                        st.session_state.font_color,
+                        st.session_state.background_opacity,
+                        st.session_state.date_margin
+                    )
+            
             processed_images.append(aligned)
             successful_paths.append(img_path)
             
@@ -546,6 +873,47 @@ def process_images():
                 debug_images.append(debug_img)
             else:
                 aligned = st.session_state.stabilizer.align_and_crop_face(img)
+            
+            # 添加日期水印（如果启用）
+            if st.session_state.enable_date_naming:
+                date_str = None
+                current_image_index = len(processed_images)  # 当前图片的索引
+                
+                # 根据不同的日期来源获取日期
+                if st.session_state.date_source == "date_from_input" and st.session_state.start_date:
+                    # 用户输入模式：按顺序递增
+                    current_date = st.session_state.start_date + timedelta(days=current_image_index * st.session_state.date_interval_days)
+                    
+                elif st.session_state.date_source == "date_from_filename":
+                    # 从文件名解析日期
+                    filename_to_parse = os.path.basename(uploaded_file.name)
+                    current_date = parse_date_from_filename(filename_to_parse, st.session_state.date_parse_pattern)
+                        
+                elif st.session_state.date_source == "date_from_metadata":
+                    # 从EXIF数据获取日期
+                    current_date = get_exif_date(uploaded_file.name)
+                else:
+                    current_date = None
+                
+                # 格式化日期字符串
+                if current_date:
+                    if st.session_state.date_format == "YYYY-MM-DD":
+                        date_str = current_date.strftime("%Y-%m-%d")
+                    elif st.session_state.date_format == "MM-DD-YYYY":
+                        date_str = current_date.strftime("%m-%d-%Y")
+                    else:  # DD-MM-YYYY
+                        date_str = current_date.strftime("%d-%m-%Y")
+                
+                # 添加水印
+                if date_str:
+                    aligned = add_date_watermark(
+                        aligned, date_str, 
+                        st.session_state.date_position,
+                        st.session_state.font_size,
+                        st.session_state.font_color,
+                        st.session_state.background_opacity,
+                        st.session_state.date_margin
+                    )
             
             processed_images.append(aligned)
             successful_paths.append(uploaded_file.name)  # 存储文件名而不是路径
@@ -687,12 +1055,60 @@ def save_all_images():
             else:
                 base_name = f"unknown_{i}.jpg"
             
+            # 生成文件名
+            if st.session_state.enable_date_naming:
+                date_str = None
+                
+                # 根据不同的日期来源获取日期
+                if st.session_state.date_source == "date_from_input" and st.session_state.start_date:
+                    # 用户输入模式：按顺序递增
+                    current_date = st.session_state.start_date + timedelta(days=i * st.session_state.date_interval_days)
+                    
+                elif st.session_state.date_source == "date_from_filename":
+                    # 从文件名解析日期
+                    if i < len(st.session_state.successful_paths):
+                        path_or_name = st.session_state.successful_paths[i]
+                        filename_to_parse = os.path.basename(path_or_name) if os.path.isfile(path_or_name) else path_or_name
+                        current_date = parse_date_from_filename(filename_to_parse, st.session_state.date_parse_pattern)
+                    else:
+                        current_date = None
+                        
+                elif st.session_state.date_source == "date_from_metadata":
+                    # 从EXIF数据获取日期
+                    if i < len(st.session_state.successful_paths):
+                        path_or_name = st.session_state.successful_paths[i]
+                        if os.path.isfile(path_or_name):
+                            current_date = get_exif_date(path_or_name)
+                        else:
+                            # 对于上传文件，尝试从文件名解析
+                            current_date = parse_date_from_filename(path_or_name, st.session_state.date_parse_pattern)
+                    else:
+                        current_date = None
+                
+                # 格式化日期字符串
+                if current_date:
+                    if st.session_state.date_format == "YYYY-MM-DD":
+                        date_str = current_date.strftime("%Y-%m-%d")
+                    elif st.session_state.date_format == "MM-DD-YYYY":
+                        date_str = current_date.strftime("%m-%d-%Y")
+                    else:  # DD-MM-YYYY
+                        date_str = current_date.strftime("%d-%m-%Y")
+                
+                # 生成最终文件名
+                if date_str:
+                    file_ext = os.path.splitext(base_name)[1] if '.' in base_name else '.jpg'
+                    filename = f"{date_str}_aligned_{os.path.splitext(base_name)[0]}{file_ext}"
+                else:
+                    filename = f"aligned_{base_name}"
+            else:
+                filename = f"aligned_{base_name}"
+            
             # 保存图片
-            output_path = os.path.join(output_dir, f"aligned_{base_name}")
+            output_path = os.path.join(output_dir, filename)
             cv2.imwrite(output_path, img)
             count += 1
             
-            status_text.text(get_text("save_progress", i+1, total, base_name))
+            status_text.text(get_text("save_progress", i+1, total, filename))
             
         except Exception as e:
             st.error(get_text("save_failed", i, str(e)))
@@ -993,6 +1409,179 @@ with st.sidebar:
                 get_text("debug_mode"), 
                 value=False,
                 help=get_text("debug_mode_help")
+            )
+    
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    
+    # 日期设置
+    with st.expander(get_text("date_settings"), expanded=True):
+        st.session_state.enable_date_naming = st.checkbox(
+            get_text("enable_date_naming"),
+            value=st.session_state.enable_date_naming,
+            help=get_text("enable_date_naming_help")
+        )
+        
+        if st.session_state.enable_date_naming:
+            # 日期来源选择 - 使用映射来避免多语言问题
+            date_source_options = [get_text("date_from_input"), get_text("date_from_filename"), get_text("date_from_metadata")]
+            date_source_keys = ["date_from_input", "date_from_filename", "date_from_metadata"]
+            
+            # 找到当前选择的索引
+            try:
+                current_index = date_source_keys.index(st.session_state.date_source)
+            except ValueError:
+                current_index = 0  # 默认选择第一个
+                st.session_state.date_source = date_source_keys[0]
+            
+            selected_option = st.radio(
+                get_text("date_source"),
+                options=date_source_options,
+                index=current_index,
+                help=get_text("date_source_help")
+            )
+            
+            # 更新session_state为对应的键
+            st.session_state.date_source = date_source_keys[date_source_options.index(selected_option)]
+            
+            if st.session_state.date_source == "date_from_input":
+                # 用户输入模式
+                st.session_state.start_date = st.date_input(
+                    get_text("start_date"),
+                    value=st.session_state.start_date,
+                    help=get_text("start_date_help")
+                )
+                st.session_state.date_interval_days = st.number_input(
+                    get_text("date_interval"),
+                    value=st.session_state.date_interval_days,
+                    min_value=1,
+                    help=get_text("date_interval_help")
+                )
+                
+            elif st.session_state.date_source == "date_from_filename":
+                # 从文件名解析日期
+                st.session_state.date_parse_pattern = st.selectbox(
+                    get_text("date_parse_pattern"),
+                    options=["YYYY-MM-DD", "YYYY_MM_DD", "YYYYMMDD", "MM-DD-YYYY", "DD-MM-YYYY"],
+                    index=["YYYY-MM-DD", "YYYY_MM_DD", "YYYYMMDD", "MM-DD-YYYY", "DD-MM-YYYY"].index(st.session_state.date_parse_pattern),
+                    help=get_text("date_parse_pattern_help")
+                )
+                
+                # 自动排序选项
+                st.session_state.auto_sort_by_date = st.checkbox(
+                    get_text("auto_sort_by_date"),
+                    value=st.session_state.auto_sort_by_date,
+                    help=get_text("auto_sort_help")
+                )
+                
+                if st.session_state.auto_sort_by_date:
+                    # 排序方式选择 - 使用映射避免多语言问题
+                    sort_options = [get_text("sort_ascending"), get_text("sort_descending")]
+                    sort_keys = ["sort_ascending", "sort_descending"]
+                    
+                    try:
+                        sort_index = sort_keys.index(st.session_state.sort_order)
+                    except ValueError:
+                        sort_index = 0
+                        st.session_state.sort_order = sort_keys[0]
+                    
+                    selected_sort = st.radio(
+                        get_text("sort_order"),
+                        options=sort_options,
+                        index=sort_index,
+                        horizontal=True
+                    )
+                    
+                    st.session_state.sort_order = sort_keys[sort_options.index(selected_sort)]
+            
+            else:  # 从元数据解析
+                st.info(get_text("metadata_info"))
+                st.session_state.auto_sort_by_date = st.checkbox(
+                    get_text("auto_sort_by_date"),
+                    value=st.session_state.auto_sort_by_date,
+                    help=get_text("auto_sort_help")
+                )
+            
+            # 日期格式和水印样式设置
+            st.subheader(get_text("date_format_section"))
+            st.session_state.date_format = st.selectbox(
+                get_text("date_format"),
+                options=["YYYY-MM-DD", "MM-DD-YYYY", "DD-MM-YYYY"],
+                index=["YYYY-MM-DD", "MM-DD-YYYY", "DD-MM-YYYY"].index(st.session_state.date_format),
+                help=get_text("date_format_help")
+            )
+             
+            # 水印样式设置
+            st.subheader(get_text("watermark_style_section"))
+             
+            # 位置和字体大小设置
+            col1, col2 = st.columns(2)
+            with col1:
+                # 位置选择 - 使用映射避免多语言问题
+                position_options = [get_text("position_top_left"), get_text("position_top_right"), 
+                                  get_text("position_bottom_left"), get_text("position_bottom_right")]
+                position_keys = ["position_top_left", "position_top_right", 
+                               "position_bottom_left", "position_bottom_right"]
+                
+                try:
+                    position_index = position_keys.index(st.session_state.date_position)
+                except ValueError:
+                    position_index = 3  # 默认右下角
+                    st.session_state.date_position = position_keys[3]
+                
+                selected_position = st.selectbox(
+                    get_text("date_position"),
+                    options=position_options,
+                    index=position_index,
+                    help=get_text("date_position_help")
+                )
+                
+                st.session_state.date_position = position_keys[position_options.index(selected_position)]
+             
+            with col2:
+                st.session_state.font_size = st.selectbox(
+                    get_text("font_size"),
+                    options=[5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0, 15.0],
+                    index=[5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0, 15.0].index(st.session_state.font_size),
+                    help=get_text("font_size_help")
+                )
+             
+            # 颜色和透明度设置
+            style_col1, style_col2 = st.columns(2)
+            with style_col1:
+                # 字体颜色选择 - 使用映射避免多语言问题
+                color_options = [get_text("white"), get_text("black"), get_text("yellow"), get_text("red")]
+                color_keys = ["white", "black", "yellow", "red"]
+                
+                try:
+                    color_index = color_keys.index(st.session_state.font_color)
+                except ValueError:
+                    color_index = 0  # 默认白色
+                    st.session_state.font_color = color_keys[0]
+                
+                selected_color = st.selectbox(
+                    get_text("font_color"),
+                    options=color_options,
+                    index=color_index,
+                    help=get_text("font_color_help")
+                )
+                
+                st.session_state.font_color = color_keys[color_options.index(selected_color)]
+             
+            with style_col2:
+                st.session_state.background_opacity = st.slider(
+                    get_text("background_opacity"),
+                    min_value=0.0, max_value=1.0,
+                    value=st.session_state.background_opacity,
+                    step=0.1,
+                    help=get_text("background_opacity_help")
+                )
+             
+            # 边距设置
+            st.session_state.date_margin = st.slider(
+                get_text("date_margin"),
+                min_value=5, max_value=80,
+                value=st.session_state.date_margin,
+                help=get_text("date_margin_help")
             )
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)

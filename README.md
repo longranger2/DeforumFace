@@ -55,6 +55,9 @@ streamlit run streamlit_app.py   # Direct launch
 - Debug mode with keypoint visualization
 - **Modern Web Interface**: Intuitive Streamlit-based interface
 - **One-click Clear**: Easy uploaded image clearing functionality
+- **📅 Date Watermark System**: Advanced date overlay functionality with intelligent positioning and styling
+- **🎨 Smart Background Colors**: Automatic background color selection based on font color for optimal readability
+- **📏 Adaptive Font Sizing**: Percentage-based font sizing (5%-15% of image width) for consistent appearance across all resolutions
 
 ## Algorithm Improvements
 
@@ -93,34 +96,127 @@ streamlit run streamlit_app.py   # Direct launch
 | Stability | Medium | High | Significant |
 | Image Quality | Average | High | Notable |
 
+## Date Watermark Features 📅
+
+### Overview
+The tool now includes a comprehensive date watermarking system that overlays date information directly onto images, making it perfect for creating time-lapse videos where dates are visible during playback.
+
+### Core Functionality
+
+#### 1. **Multiple Date Sources** 📊
+- **User Input (Recommended)**: Set start date and interval for sequential dating
+- **Filename Parsing**: Extract dates from filenames with multiple format support
+- **EXIF Metadata**: Automatically read camera shooting dates from image metadata
+
+#### 2. **Supported Date Formats** 📋
+- **Filename Patterns**: YYYY-MM-DD, YYYY_MM_DD, YYYYMMDD, MM-DD-YYYY, DD-MM-YYYY
+- **Display Formats**: YYYY-MM-DD, MM-DD-YYYY, DD-MM-YYYY
+- **Auto-sorting**: Chronological ordering with ascending/descending options
+
+#### 3. **Advanced Styling Options** 🎨
+- **Font Size**: 5.0% to 15.0% of image width (adaptive sizing)
+- **Position**: Four corner placement options (top-left, top-right, bottom-left, bottom-right)
+- **Colors**: White, black, yellow, red with intelligent contrast
+- **Background**: Optional semi-transparent background (0-100% opacity)
+- **Margins**: Adjustable spacing from image edges (5-80 pixels)
+
+#### 4. **Intelligent Background System** 🧠
+- **Smart Color Selection**: Automatically chooses background color based on font color
+  - White/Yellow fonts → Black background
+  - Black/Red fonts → White background
+- **Transparency Control**: 0% (no background) to 100% (fully opaque)
+- **Default Setting**: No background for clean appearance
+
+#### 5. **Real-time Preview** 👀
+```
+📅 Date Display: `2024-03-15`
+📍 Position: Bottom Right
+🔤 Font: 8.0% image width, White
+🎭 Background: No Background
+```
+
+### Technical Improvements
+
+#### Adaptive Font Sizing
+- **Problem Solved**: Fixed pixel sizes were too small for high-resolution images
+- **Solution**: Percentage-based sizing relative to image width
+- **Benefits**: Consistent visual appearance across all resolutions
+
+**Examples**:
+- 1024×1024 image: 15% = ~153 pixels
+- 2048×2048 image: 15% = ~307 pixels  
+- 4K image (3840×2160): 15% = ~576 pixels
+
+#### Smart Background Colors
+- **Problem Solved**: Fixed black backgrounds created poor contrast with dark fonts
+- **Solution**: Intelligent color selection based on font color
+- **Result**: Optimal readability in all scenarios
+
+### Recommended Settings
+
+#### **Bright Background Photos**
+- Font: Black, 8-10% size
+- Position: Bottom-right
+- Background: 50-70% opacity
+
+#### **Dark Background Photos**  
+- Font: White, 8-10% size
+- Position: Bottom-right
+- Background: 60-80% opacity
+
+#### **Video Creation**
+- Font: White, 10-12% size
+- Position: Bottom-right  
+- Background: 70% opacity
+- Margin: 30-40 pixels
+
+#### **Social Media Sharing**
+- Font: Any color, 6-8% size
+- Position: Top-right or bottom-left
+- Background: 0% (no background)
+
+### Interface Organization
+
+The date settings are strategically placed before video settings in the sidebar, following the natural workflow:
+1. **📁 File Settings** - Select images
+2. **🖼️ Reference Settings** - Set alignment baseline  
+3. **📅 Date Settings** - Configure watermarks
+4. **🎬 Video Export** - Create final videos
+5. **🚀 Operations** - Process and save
+
 ## Usage Guide
 
 ### Web Interface Operation
+1. **Language Settings**: Switch between Chinese and English interface
 
-1. **File Selection**: 
+2. **File Selection**: 
    - **Upload Images**: Use file uploader with multi-select support
    - **Specify Folder**: Enter folder path containing photos
    - **Clear Function**: One-click to clear uploaded images and reselect
+3. **Reference Image Setup**: Upload or specify reference image path (highly recommended)
 
-2. **Reference Image Setup**: Upload or specify reference image path (highly recommended)
-
-3. **Processing Mode Selection**:
+4. **Processing Mode Selection**:
    - **Smart Mode (Recommended)**: Optimized default parameters for most users
    - **Custom Settings**: Full parameter control for advanced users
 
-4. **Parameter Adjustment** (Custom mode):
+5. **Parameter Adjustment** (Custom mode):
    - **Eye Distance**: Adjust face size ratio in image (recommended 25-35%)
    - **Tilt Threshold**: Adjust strictness for filtering tilted head photos (recommended 3-8°)
    - **Debug Mode**: Enable to show facial keypoints
    - **Force Reference Size**: Use reference image dimensions as output size
 
-5. **Language Settings**: Switch between Chinese and English interface
+6. **Date Watermark Setup** (Optional):
+   - **Enable Date Display**: Toggle date watermarks on images
+   - **Date Source**: Choose from user input, filename parsing, or EXIF metadata
+   - **Styling Options**: Configure font size (5-15% of image width), position, colors, and background
+   - **Preview**: Real-time preview of date appearance
 
-6. **Start Processing**: Click "Process All Images" button
 
-7. **View Results**: Use "Previous" and "Next" buttons to browse processing results
+7. **Start Processing**: Click "Process All Images" button
 
-8. **Save Results**: Click "Save All Images" to save to program directory
+8. **View Results**: Use "Previous" and "Next" buttons to browse processing results
+
+9. **Save Results**: Click "Save All Images" to save to program directory
 
 ### Programming Interface
 
@@ -248,15 +344,6 @@ A: Optimization tips:
 - Reduce input image resolution
 - Process fewer images simultaneously
 - Disable debug mode
-
-## Use Cases
-
-- ✅ Avatar video creation ("Everything Everywhere All at Once" style)
-- ✅ ID photo standardization
-- ✅ Face dataset preprocessing
-- ✅ Video conference avatar stabilization
-- ✅ Live streaming face swap applications
-- ✅ Social media content creation
 
 ## System Requirements
 
@@ -445,7 +532,7 @@ Project Root/
 **Build/Package Files**:
 - **`prepare_build.py`** - 🛠️ Cross-platform build preparation, auto-generates spec files
 - **`build_exe.py`** - 🏗️ Local packaging script
-- **`run_streamlit.py`** - 🔧 PyInstaller-specific launcher
+- **`run_streamlit.py`** - 🔧 PyInstaller launcher
 - **`run_windows.bat`** - 🪟 Python environment solution for Windows users
 - **`hooks/`** - 📦 PyInstaller hooks folder
 
