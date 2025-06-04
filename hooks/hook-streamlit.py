@@ -1,13 +1,19 @@
-from PyInstaller.utils.hooks import copy_metadata, collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
-# 复制Streamlit的元数据
+# Copy streamlit metadata - this is critical for runtime to find version info
 datas = copy_metadata("streamlit")
 
-# 收集Streamlit的数据文件
+# Collect streamlit data files
 datas += collect_data_files("streamlit")
 
-# 添加隐藏导入
-hiddenimports = [
+# Collect all streamlit submodules automatically
+hiddenimports = collect_submodules("streamlit")
+
+print(f"[STREAMLIT HOOK] Collected {len(datas)} data files")
+print(f"[STREAMLIT HOOK] Included {len(hiddenimports)} hidden imports")
+
+# Add essential streamlit modules
+essential_imports = [
     'streamlit.web.cli',
     'streamlit.web.server',
     'streamlit.web.server.server',
@@ -17,7 +23,12 @@ hiddenimports = [
     'streamlit.runtime.uploaded_file_manager',
     'streamlit.components.v1',
     'streamlit.delta_generator',
-    'streamlit.elements',
+]
+
+hiddenimports.extend(essential_imports)
+
+# 添加隐藏导入
+hiddenimports += [
     'streamlit.elements.form',
     'streamlit.elements.button',
     'streamlit.elements.selectbox',

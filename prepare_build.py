@@ -72,66 +72,85 @@ def get_windows_mediapipe_binaries():
     return binaries
 
 def main():
-    # Ensure hooks directory exists (usually already exists)
+    # Ensure hooks directory exists
     if not os.path.exists('hooks'):
         print("Creating hooks directory...")
         os.makedirs('hooks')
-        
-        # Only create basic hook file if hooks directory doesn't exist
-        print("Creating basic hook file...")
-        hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-datas = collect_data_files('streamlit')
-hiddenimports = collect_submodules('streamlit')
-"""
-        with open('hooks/hook-streamlit.py', 'w', encoding='utf-8') as f:
-            f.write(hook_content)
-    else:
-        print("Using existing hooks directory and files")
     
-    # Get site-packages path with better detection
+    # Create simple, effective hooks
+    print("Creating hook files...")
+    
+    # Streamlit hook - keep it simple but include metadata
+    streamlit_hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+
+# Copy streamlit metadata - this is critical for runtime to find version info
+datas = copy_metadata("streamlit")
+
+# Collect streamlit data files
+datas += collect_data_files("streamlit")
+
+# Collect all streamlit submodules automatically
+hiddenimports = collect_submodules("streamlit")
+
+print(f"[STREAMLIT HOOK] Collected {len(datas)} data files")
+print(f"[STREAMLIT HOOK] Included {len(hiddenimports)} hidden imports")
+"""
+    with open('hooks/hook-streamlit.py', 'w', encoding='utf-8') as f:
+        f.write(streamlit_hook_content)
+    
+    # MediaPipe hook - let PyInstaller handle automatically, avoid manual path operations
+    mediapipe_hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+# Collect MediaPipe submodules
+hiddenimports = collect_submodules('mediapipe')
+
+# Use automatic collection only to avoid duplicates
+# This is the recommended approach, PyInstaller handles paths automatically
+datas = collect_data_files('mediapipe')
+
+# Add necessary hidden imports
+additional_hiddenimports = [
+    'mediapipe.python._framework_bindings',
+    'mediapipe.python.solutions.face_mesh',
+    'mediapipe.python.solutions.drawing_utils',
+    'mediapipe.python.solutions.drawing_styles',
+    'google.protobuf.pyext._message',
+]
+
+hiddenimports.extend(additional_hiddenimports)
+
+print(f"[MEDIAPIPE HOOK] Collected {len(datas)} data files")
+print(f"[MEDIAPIPE HOOK] Included {len(hiddenimports)} hidden imports")
+"""
+    with open('hooks/hook-mediapipe.py', 'w', encoding='utf-8') as f:
+        f.write(mediapipe_hook_content)
+    
+    # Get site-packages path
     site_packages = find_site_packages()
     print(f'Site packages: {site_packages}')
     print(f'Platform: {platform.system()}')
     
-    # Check critical paths and build datas list dynamically
+    # Minimize data file list, only include core application files
     critical_paths = [
         ('streamlit_app.py', '.'),
         ('head_stabilizer.py', '.'),
     ]
     
-    # Check for streamlit static files
+    # Only add necessary Streamlit files
     streamlit_static = os.path.join(site_packages, 'streamlit', 'static')
     if os.path.exists(streamlit_static):
         critical_paths.append((streamlit_static, 'streamlit/static'))
-        print(f"[EXISTS] streamlit/static: {streamlit_static}")
-    else:
-        print(f"[MISSING] streamlit/static: {streamlit_static}")
+        print(f"[EXISTS] streamlit/static")
     
-    # Check for streamlit runtime files
     streamlit_runtime = os.path.join(site_packages, 'streamlit', 'runtime')
     if os.path.exists(streamlit_runtime):
         critical_paths.append((streamlit_runtime, 'streamlit/runtime'))
-        print(f"[EXISTS] streamlit/runtime: {streamlit_runtime}")
-    else:
-        print(f"[MISSING] streamlit/runtime: {streamlit_runtime}")
+        print(f"[EXISTS] streamlit/runtime")
     
-    # Check for mediapipe modules
-    mediapipe_modules = os.path.join(site_packages, 'mediapipe', 'modules')
-    if os.path.exists(mediapipe_modules):
-        critical_paths.append((mediapipe_modules, 'mediapipe/modules'))
-        print(f"[EXISTS] mediapipe/modules: {mediapipe_modules}")
-    else:
-        print(f"[MISSING] mediapipe/modules: {mediapipe_modules}")
+    # MediaPipe is completely handled by hook, don't add manually here
+    print("[INFO] MediaPipe files will be handled automatically by hook")
     
-    # Windows-specific MediaPipe data files
-    if platform.system() == 'Windows':
-        mediapipe_data = os.path.join(site_packages, 'mediapipe', 'python', 'solutions')
-        if os.path.exists(mediapipe_data):
-            critical_paths.append((mediapipe_data, 'mediapipe/python/solutions'))
-            print(f"[EXISTS] mediapipe/python/solutions: {mediapipe_data}")
-    
-    # Convert datas to spec format with proper path escaping
+    # Convert datas to spec format
     datas_str = ",\n        ".join([f"(r'{src}', r'{dst}')" for src, dst in critical_paths])
     
     # Get Windows-specific binaries
@@ -146,21 +165,11 @@ hiddenimports = collect_submodules('streamlit')
     else:
         binaries_str = "[]"
     
-    # Enhanced hidden imports for Windows
+    # Simplified hidden imports list
     hidden_imports = [
         'streamlit',
         'streamlit.web.cli',
-        'streamlit.runtime.scriptrunner.magic_funcs',
-        'streamlit.runtime.caching.cache_data_api',
-        'streamlit.runtime.metrics_util',
-        'streamlit.components.v1.components',
-        'streamlit.external.langchain',
         'mediapipe',
-        'mediapipe.python',
-        'mediapipe.python.solutions',
-        'mediapipe.python.solutions.face_mesh',
-        'mediapipe.python.solutions.drawing_utils',
-        'mediapipe.python.solutions.drawing_styles',
         'cv2',
         'numpy',
         'PIL',
@@ -173,19 +182,13 @@ hiddenimports = collect_submodules('streamlit')
     if platform.system() == 'Windows':
         hidden_imports.extend([
             'mediapipe.python._framework_bindings',
-            'google.protobuf',
-            'google.protobuf.internal',
-            'google.protobuf.pyext',
             'google.protobuf.pyext._message',
         ])
     
     hidden_imports_str = ",\n        ".join([f"'{imp}'" for imp in hidden_imports])
     
-    # Create PyInstaller spec file with proper cross-platform path handling
+    # Create simplified PyInstaller spec file
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
-import os
-import site
-import platform
 
 block_cipher = None
 
@@ -234,31 +237,15 @@ exe = EXE(
 )
 """
     
-    # Write spec file with UTF-8 encoding
-    try:
-        with open('HeadAlignmentTool.spec', 'w', encoding='utf-8') as f:
-            f.write(spec_content)
-        print('[SUCCESS] Build environment prepared successfully')
-    except UnicodeEncodeError as e:
-        print(f'[ERROR] Encoding error: {e}')
-        # Fallback: write with platform default encoding
-        with open('HeadAlignmentTool.spec', 'w') as f:
-            f.write(spec_content)
-        print('[SUCCESS] Build environment prepared with fallback encoding')
-    
-    if os.path.exists('hooks/hook-streamlit.py'):
-        print('[SUCCESS] Using existing hooks/hook-streamlit.py file')
+    # Write spec file
+    with open('HeadAlignmentTool.spec', 'w', encoding='utf-8') as f:
+        f.write(spec_content)
+    print('[SUCCESS] Build environment prepared successfully')
     
     # Verify spec file was created
     if os.path.exists('HeadAlignmentTool.spec'):
         spec_size = os.path.getsize('HeadAlignmentTool.spec')
         print(f'[SUCCESS] Spec file created ({spec_size} bytes)')
-    
-    # Check if dist directory exists and show contents
-    if os.path.exists('dist'):
-        print('[INFO] Contents of dist directory:')
-        for item in os.listdir('dist'):
-            print(f'  - {item}')
 
 if __name__ == '__main__':
     main() 
