@@ -72,66 +72,76 @@ def get_windows_mediapipe_binaries():
     return binaries
 
 def main():
-    # Ensure hooks directory exists (usually already exists)
+    # Ensure hooks directory exists
     if not os.path.exists('hooks'):
         print("Creating hooks directory...")
         os.makedirs('hooks')
-        
-        # Only create basic hook file if hooks directory doesn't exist
-        print("Creating basic hook file...")
-        hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+    
+    # Create simple, effective hooks
+    print("Creating hook files...")
+    
+    # Streamlit hook - keep it simple
+    streamlit_hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = collect_data_files('streamlit')
 hiddenimports = collect_submodules('streamlit')
 """
-        with open('hooks/hook-streamlit.py', 'w', encoding='utf-8') as f:
-            f.write(hook_content)
-    else:
-        print("Using existing hooks directory and files")
+    with open('hooks/hook-streamlit.py', 'w', encoding='utf-8') as f:
+        f.write(streamlit_hook_content)
     
-    # Get site-packages path with better detection
+    # MediaPipe hook - 让PyInstaller自动处理，避免手动路径操作
+    mediapipe_hook_content = """from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+# 收集MediaPipe子模块
+hiddenimports = collect_submodules('mediapipe')
+
+# 只使用自动收集，避免重复
+# 这是推荐的方法，PyInstaller会自动处理路径
+datas = collect_data_files('mediapipe')
+
+# 添加必要的隐藏导入
+additional_hiddenimports = [
+    'mediapipe.python._framework_bindings',
+    'mediapipe.python.solutions.face_mesh',
+    'mediapipe.python.solutions.drawing_utils',
+    'mediapipe.python.solutions.drawing_styles',
+    'google.protobuf.pyext._message',
+]
+
+hiddenimports.extend(additional_hiddenimports)
+
+print(f"[MEDIAPIPE HOOK] 收集到 {len(datas)} 个数据文件")
+print(f"[MEDIAPIPE HOOK] 包含 {len(hiddenimports)} 个隐藏导入")
+"""
+    with open('hooks/hook-mediapipe.py', 'w', encoding='utf-8') as f:
+        f.write(mediapipe_hook_content)
+    
+    # Get site-packages path
     site_packages = find_site_packages()
     print(f'Site packages: {site_packages}')
     print(f'Platform: {platform.system()}')
     
-    # Check critical paths and build datas list dynamically
+    # 最小化数据文件列表，只包含核心应用文件
     critical_paths = [
         ('streamlit_app.py', '.'),
         ('head_stabilizer.py', '.'),
     ]
     
-    # Check for streamlit static files
+    # 只添加确实需要的Streamlit文件
     streamlit_static = os.path.join(site_packages, 'streamlit', 'static')
     if os.path.exists(streamlit_static):
         critical_paths.append((streamlit_static, 'streamlit/static'))
-        print(f"[EXISTS] streamlit/static: {streamlit_static}")
-    else:
-        print(f"[MISSING] streamlit/static: {streamlit_static}")
+        print(f"[EXISTS] streamlit/static")
     
-    # Check for streamlit runtime files
     streamlit_runtime = os.path.join(site_packages, 'streamlit', 'runtime')
     if os.path.exists(streamlit_runtime):
         critical_paths.append((streamlit_runtime, 'streamlit/runtime'))
-        print(f"[EXISTS] streamlit/runtime: {streamlit_runtime}")
-    else:
-        print(f"[MISSING] streamlit/runtime: {streamlit_runtime}")
+        print(f"[EXISTS] streamlit/runtime")
     
-    # Check for mediapipe modules
-    mediapipe_modules = os.path.join(site_packages, 'mediapipe', 'modules')
-    if os.path.exists(mediapipe_modules):
-        critical_paths.append((mediapipe_modules, 'mediapipe/modules'))
-        print(f"[EXISTS] mediapipe/modules: {mediapipe_modules}")
-    else:
-        print(f"[MISSING] mediapipe/modules: {mediapipe_modules}")
+    # MediaPipe完全由hook处理，不在这里手动添加
+    print("[INFO] MediaPipe files will be handled automatically by hook")
     
-    # Windows-specific MediaPipe data files
-    if platform.system() == 'Windows':
-        mediapipe_data = os.path.join(site_packages, 'mediapipe', 'python', 'solutions')
-        if os.path.exists(mediapipe_data):
-            critical_paths.append((mediapipe_data, 'mediapipe/python/solutions'))
-            print(f"[EXISTS] mediapipe/python/solutions: {mediapipe_data}")
-    
-    # Convert datas to spec format with proper path escaping
+    # Convert datas to spec format
     datas_str = ",\n        ".join([f"(r'{src}', r'{dst}')" for src, dst in critical_paths])
     
     # Get Windows-specific binaries
@@ -146,21 +156,11 @@ hiddenimports = collect_submodules('streamlit')
     else:
         binaries_str = "[]"
     
-    # Enhanced hidden imports for Windows
+    # 简化隐藏导入列表
     hidden_imports = [
         'streamlit',
         'streamlit.web.cli',
-        'streamlit.runtime.scriptrunner.magic_funcs',
-        'streamlit.runtime.caching.cache_data_api',
-        'streamlit.runtime.metrics_util',
-        'streamlit.components.v1.components',
-        'streamlit.external.langchain',
         'mediapipe',
-        'mediapipe.python',
-        'mediapipe.python.solutions',
-        'mediapipe.python.solutions.face_mesh',
-        'mediapipe.python.solutions.drawing_utils',
-        'mediapipe.python.solutions.drawing_styles',
         'cv2',
         'numpy',
         'PIL',
@@ -169,23 +169,17 @@ hiddenimports = collect_submodules('streamlit')
         'PIL.ImageFont',
     ]
     
-    # Windows-specific imports
+    # Windows特定导入
     if platform.system() == 'Windows':
         hidden_imports.extend([
             'mediapipe.python._framework_bindings',
-            'google.protobuf',
-            'google.protobuf.internal',
-            'google.protobuf.pyext',
             'google.protobuf.pyext._message',
         ])
     
     hidden_imports_str = ",\n        ".join([f"'{imp}'" for imp in hidden_imports])
     
-    # Create PyInstaller spec file with proper cross-platform path handling
+    # Create simplified PyInstaller spec file
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
-import os
-import site
-import platform
 
 block_cipher = None
 
@@ -234,31 +228,15 @@ exe = EXE(
 )
 """
     
-    # Write spec file with UTF-8 encoding
-    try:
-        with open('HeadAlignmentTool.spec', 'w', encoding='utf-8') as f:
-            f.write(spec_content)
-        print('[SUCCESS] Build environment prepared successfully')
-    except UnicodeEncodeError as e:
-        print(f'[ERROR] Encoding error: {e}')
-        # Fallback: write with platform default encoding
-        with open('HeadAlignmentTool.spec', 'w') as f:
-            f.write(spec_content)
-        print('[SUCCESS] Build environment prepared with fallback encoding')
-    
-    if os.path.exists('hooks/hook-streamlit.py'):
-        print('[SUCCESS] Using existing hooks/hook-streamlit.py file')
+    # Write spec file
+    with open('HeadAlignmentTool.spec', 'w', encoding='utf-8') as f:
+        f.write(spec_content)
+    print('[SUCCESS] Build environment prepared successfully')
     
     # Verify spec file was created
     if os.path.exists('HeadAlignmentTool.spec'):
         spec_size = os.path.getsize('HeadAlignmentTool.spec')
         print(f'[SUCCESS] Spec file created ({spec_size} bytes)')
-    
-    # Check if dist directory exists and show contents
-    if os.path.exists('dist'):
-        print('[INFO] Contents of dist directory:')
-        for item in os.listdir('dist'):
-            print(f'  - {item}')
 
 if __name__ == '__main__':
     main() 

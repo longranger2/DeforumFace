@@ -1,49 +1,28 @@
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
-import os
-import platform
+#!/usr/bin/env python3
+"""
+PyInstaller hook for MediaPipe
+Handles MediaPipe data files and dependencies properly
+"""
 
-# Collect all MediaPipe data files
-datas = collect_data_files('mediapipe')
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-# Collect all MediaPipe submodules
+# 收集MediaPipe子模块
 hiddenimports = collect_submodules('mediapipe')
 
-# Windows-specific handling
-if platform.system() == 'Windows':
-    # Add Windows-specific hidden imports
-    hiddenimports.extend([
-        'mediapipe.python._framework_bindings',
-        'google.protobuf',
-        'google.protobuf.internal',
-        'google.protobuf.pyext',
-        'google.protobuf.pyext._message',
-        'mediapipe.calculators',
-        'mediapipe.framework',
-        'mediapipe.gpu',
-    ])
-    
-    # Collect dynamic libraries (DLLs)
-    binaries = collect_dynamic_libs('mediapipe')
-    
-    # Try to find specific MediaPipe model files
-    try:
-        import mediapipe as mp
-        mp_path = os.path.dirname(mp.__file__)
-        
-        # Look for model files
-        for root, dirs, files in os.walk(mp_path):
-            for file in files:
-                if file.endswith(('.binarypb', '.tflite', '.pb')):
-                    full_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(full_path, mp_path)
-                    datas.append((full_path, f'mediapipe/{rel_path}'))
-    except ImportError:
-        pass
+# 只使用自动收集，避免重复
+# 这是推荐的方法，PyInstaller会自动处理路径
+datas = collect_data_files('mediapipe')
 
-# Add essential MediaPipe modules
-hiddenimports.extend([
+# 添加必要的隐藏导入
+additional_hiddenimports = [
+    'mediapipe.python._framework_bindings',
     'mediapipe.python.solutions.face_mesh',
     'mediapipe.python.solutions.drawing_utils',
     'mediapipe.python.solutions.drawing_styles',
-    'mediapipe.python.solution_base',
-]) 
+    'google.protobuf.pyext._message',
+]
+
+hiddenimports.extend(additional_hiddenimports)
+
+print(f"[MEDIAPIPE HOOK] 收集到 {len(datas)} 个数据文件")
+print(f"[MEDIAPIPE HOOK] 包含 {len(hiddenimports)} 个隐藏导入") 
